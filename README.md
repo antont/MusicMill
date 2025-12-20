@@ -4,15 +4,16 @@ DJ-oriented Music Machine Learning (ML) system for macOS.
 
 ## Overview
 
-MusicMill analyzes your DJ music collection locally on an M3 Mac using Apple's MLSoundClassifier, trains models to understand musical styles, and provides a live performance interface with generative-style controls. The system allows you to direct the style in real-time, similar to switching folders and songs, and mixing tracks.
+MusicMill analyzes your DJ music collection locally on an M3 Mac using Apple's MLSoundClassifier, trains models to understand musical styles, and provides a live performance interface with style-based controls. The system allows you to filter and select tracks by style, tempo, and energy - similar to switching folders and songs, but with intelligent ML-based recommendations.
 
 ## Features
 
 - **Music Collection Analysis**: Scans and analyzes your DJ collection, supporting MP3, AAC, WAV, AIFF formats
 - **Style Classification**: Trains MLSoundClassifier models to identify musical styles/genres from your collection
-- **Live Performance Interface**: Real-time controls for style selection, tempo/energy adjustment, and intelligent track selection
+- **Live Performance Interface**: Controls for style selection, tempo/energy adjustment, and intelligent track selection
 - **Real-time Mixing**: Crossfade, volume, and EQ controls for live performances
 - **Intelligent Recommendations**: Model-based track recommendations matching your selected style and preferences
+- **Track Classification**: Automatically classifies tracks when loading your collection using the trained model
 
 ## Architecture
 
@@ -36,9 +37,8 @@ MusicMill/
 ├── MusicMill/
 │   ├── App/              # App entry point and main views
 │   ├── Analysis/         # Audio analysis and feature extraction
-│   ├── ML/               # Model training and inference
+│   ├── ML/               # Model training and classification
 │   ├── Performance/      # Live performance interface
-│   ├── Audio/            # Real-time audio processing
 │   └── Training/         # Training UI
 └── README.md
 ```
@@ -82,7 +82,7 @@ MusicMill/
 
 - The system organizes training data by directory structure (folders = style labels)
 - Audio segments are extracted for training (30-second clips by default)
-- Real-time inference enables dynamic style matching during playback
+- Tracks are classified once when loading the collection (not during playback)
 - Models are saved locally in Application Support directory
 
 ## Future Enhancements

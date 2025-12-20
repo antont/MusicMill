@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 struct PerformanceView: View {
     @StateObject private var styleController = StyleController()
@@ -138,9 +137,7 @@ struct PerformanceView: View {
         
         // Set up track selector with model if available
         if let model = modelManager.currentModel {
-            let liveInference = LiveInference()
-            liveInference.setModel(model)
-            trackSelector.setModel(model, liveInference: liveInference)
+            trackSelector.setModel(model)
         }
     }
     

@@ -15,7 +15,7 @@
 ### 3. ML Components ✓
 - **ModelTrainer**: Trains MLSoundClassifier models (template - adjust per actual API)
 - **ModelManager**: Saves/loads trained models, manages model metadata
-- **LiveInference**: Real-time model inference during playback
+- **TrackSelector**: Classifies tracks once when loading collection (not real-time)
 
 ### 4. Performance Interface ✓
 - **PerformanceView**: Main UI with style controls, tempo/energy sliders, track browser
@@ -28,8 +28,6 @@
 - **TrainingView**: Complete UI for directory selection, analysis, and model training
 - Progress tracking and model management
 
-### 6. Audio Processing ✓
-- **AudioProcessor**: Real-time audio processing setup for live inference
 
 ## File Structure
 
@@ -45,16 +43,13 @@ MusicMill/
 │   │   └── TrainingDataManager.swift # Training data management
 │   ├── ML/
 │   │   ├── ModelTrainer.swift      # Model training
-│   │   ├── ModelManager.swift      # Model persistence
-│   │   └── LiveInference.swift     # Real-time inference
+│   │   └── ModelManager.swift      # Model persistence
 │   ├── Performance/
 │   │   ├── PerformanceView.swift   # Main performance UI
 │   │   ├── StyleController.swift   # Style selection
-│   │   ├── TrackSelector.swift     # Track recommendations
+│   │   ├── TrackSelector.swift     # Track classification & recommendations
 │   │   ├── PlaybackController.swift # Playback control
 │   │   └── MixingEngine.swift      # Audio mixing
-│   ├── Audio/
-│   │   └── AudioProcessor.swift    # Real-time processing
 │   └── Training/
 │       └── TrainingView.swift      # Training UI
 ├── README.md
@@ -81,15 +76,15 @@ MusicMill/
    - Intelligent track recommendations
    - Playback controls
 
-4. **Real-time Capabilities**
-   - Live inference setup
-   - Audio processing pipeline
-   - Mixing engine ready
+4. **Track Classification**
+   - Classifies tracks once when loading collection
+   - Stores predicted styles for filtering/recommendations
+   - Mixing engine ready for crossfading and EQ
 
 ## Next Steps for Full Functionality
 
 1. **Adjust MLSoundClassifier API**: Update `ModelTrainer.swift` based on actual CreateML API
-2. **Complete Live Inference**: Implement actual audio buffer processing in `LiveInference`
+2. **Complete Track Classification**: Implement actual classification in `TrackSelector.classifyTrack()` using MLSoundClassifier model
 3. **Enhance Mixing**: Add smooth crossfade animations in `MixingEngine`
 4. **Add Track Loading**: Connect directory selection in Performance view to load tracks
 5. **Test & Debug**: Test with actual music collection

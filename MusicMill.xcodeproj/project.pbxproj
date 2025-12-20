@@ -14,11 +14,9 @@
 		35AACBB02EF704C7003DAD74 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA52EF704C7003DAD74 /* TrainingView.swift */; };
 		35AACBB12EF704C7003DAD74 /* StyleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA22EF704C7003DAD74 /* StyleController.swift */; };
 		35AACBB22EF704C7003DAD74 /* AudioAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */; };
-		35AACBB32EF704C7003DAD74 /* LiveInference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9B2EF704C7003DAD74 /* LiveInference.swift */; };
 		35AACBB42EF704C7003DAD74 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA12EF704C7003DAD74 /* PlaybackController.swift */; };
 		35AACBB52EF704C7003DAD74 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8F2EF704C7003DAD74 /* ContentView.swift */; };
 		35AACBB62EF704C7003DAD74 /* TrackSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA32EF704C7003DAD74 /* TrackSelector.swift */; };
-		35AACBB72EF704C7003DAD74 /* AudioProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB922EF704C7003DAD74 /* AudioProcessor.swift */; };
 		35AACBB82EF704C7003DAD74 /* FeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */; };
 		35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB902EF704C7003DAD74 /* MusicMillApp.swift */; };
 		35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA02EF704C7003DAD74 /* PerformanceView.swift */; };
@@ -49,9 +47,7 @@
 		35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingDataManager.swift; sourceTree = "<group>"; };
 		35AACB8F2EF704C7003DAD74 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		35AACB902EF704C7003DAD74 /* MusicMillApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicMillApp.swift; sourceTree = "<group>"; };
-		35AACB922EF704C7003DAD74 /* AudioProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioProcessor.swift; sourceTree = "<group>"; };
 		35AACB942EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "fenv.h-3VT5MAIXTIKH7"; sourceTree = "<group>"; };
-		35AACB9B2EF704C7003DAD74 /* LiveInference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveInference.swift; sourceTree = "<group>"; };
 		35AACB9C2EF704C7003DAD74 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTrainer.swift; sourceTree = "<group>"; };
 		35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixingEngine.swift; sourceTree = "<group>"; };
@@ -127,7 +123,6 @@
 		35AACB932EF704C7003DAD74 /* Audio */ = {
 			isa = PBXGroup;
 			children = (
-				35AACB922EF704C7003DAD74 /* AudioProcessor.swift */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -183,7 +178,6 @@
 		35AACB9E2EF704C7003DAD74 /* ML */ = {
 			isa = PBXGroup;
 			children = (
-				35AACB9B2EF704C7003DAD74 /* LiveInference.swift */,
 				35AACB9C2EF704C7003DAD74 /* ModelManager.swift */,
 				35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */,
 			);
@@ -407,11 +401,9 @@
 				35AACBB02EF704C7003DAD74 /* TrainingView.swift in Sources */,
 				35AACBB12EF704C7003DAD74 /* StyleController.swift in Sources */,
 				35AACBB22EF704C7003DAD74 /* AudioAnalyzer.swift in Sources */,
-				35AACBB32EF704C7003DAD74 /* LiveInference.swift in Sources */,
 				35AACBB42EF704C7003DAD74 /* PlaybackController.swift in Sources */,
 				35AACBB52EF704C7003DAD74 /* ContentView.swift in Sources */,
 				35AACBB62EF704C7003DAD74 /* TrackSelector.swift in Sources */,
-				35AACBB72EF704C7003DAD74 /* AudioProcessor.swift in Sources */,
 				35AACBB82EF704C7003DAD74 /* FeatureExtractor.swift in Sources */,
 				35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */,
 				35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */,
