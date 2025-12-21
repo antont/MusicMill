@@ -485,8 +485,8 @@ struct MusicMillTests {
         let outputFile = try AVAudioFile(forWriting: outputURL, settings: outputSettings)
         var capturedFrames: AVAudioFrameCount = 0
         
-        // Capture buffer for analysis - balanced duration
-        let analysisDuration: TimeInterval = 10.0 // 10 seconds - balance between stability and consistency
+        // Capture buffer for analysis - longer for accurate quality measurement
+        let analysisDuration: TimeInterval = 20.0 // 20 seconds - captures temporal artifacts honestly
         let analysisBufferCapacity = AVAudioFrameCount(44100.0 * analysisDuration)
         let analysisBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: analysisBufferCapacity)!
         
