@@ -1,30 +1,48 @@
 #!/usr/bin/env python3
 """
-Prepare training data for RAVE from MusicMill analysis segments.
-Converts audio segments to WAV format suitable for RAVE training.
+Prepare training data for RAVE from MusicMill analysis or directly from MP3 collection.
+Uses RAVE's lazy preprocessing to train directly on MP3/OGG files without conversion.
+
+Reference: https://github.com/acids-ircam/RAVE#dataset-preparation
 """
 
 import os
 import sys
 import json
 import subprocess
+import shutil
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import argparse
 
 # Configuration
 ANALYSIS_DIR = Path.home() / "Documents" / "MusicMill" / "Analysis"
-OUTPUT_DIR = Path.home() / ".musicmill" / "rave_training_data"
-SAMPLE_RATE = 44100
-CHANNELS = 1  # RAVE works best with mono
+PREPROCESSED_DIR = Path.home() / ".musicmill" / "rave_preprocessed"
 
 
-def find_segments():
-    """Find all analyzed segments from MusicMill."""
+def find_audio_files(input_path: Path, recursive: bool = True):
+    """Find all audio files in a directory."""
+    audio_extensions = {'.mp3', '.ogg', '.wav', '.flac', '.m4a', '.aiff', '.aac'}
+    
+    if not input_path.exists():
+        print(f"❌ Directory not found: {input_path}")
+        return []
+    
+    files = []
+    if recursive:
+        for ext in audio_extensions:
+            files.extend(input_path.rglob(f"*{ext}"))
+    else:
+        for ext in audio_extensions:
+            files.extend(input_path.glob(f"*{ext}"))
+    
+    return sorted(files)
+
+
+def find_musicmill_segments():
+    """Find analyzed segments from MusicMill Analysis directory."""
     segments = []
     
     if not ANALYSIS_DIR.exists():
-        print(f"❌ Analysis directory not found: {ANALYSIS_DIR}")
-        print("   Run analysis in MusicMill first.")
         return segments
     
     for collection_dir in ANALYSIS_DIR.iterdir():
@@ -32,146 +50,21 @@ def find_segments():
             continue
             
         segments_dir = collection_dir / "Segments"
-        if not segments_dir.exists():
-            continue
-            
-        # Load analysis metadata
-        analysis_file = collection_dir / "analysis.json"
-        style = None
-        if analysis_file.exists():
-            try:
-                with open(analysis_file) as f:
-                    metadata = json.load(f)
-                    # Extract style from first category if available
-                    styles = metadata.get("organizedStyles", {})
-                    if styles:
-                        style = list(styles.keys())[0]
-            except Exception as e:
-                print(f"Warning: Could not load metadata from {analysis_file}: {e}")
-        
-        # Find all audio segments
-        for segment_file in segments_dir.iterdir():
-            if segment_file.suffix.lower() in ['.m4a', '.mp3', '.wav', '.aiff', '.aac']:
-                segments.append({
-                    'path': segment_file,
-                    'style': style or collection_dir.name,
-                    'collection': collection_dir.name
-                })
+        if segments_dir.exists():
+            segments.extend(find_audio_files(segments_dir, recursive=False))
     
     return segments
 
 
-def convert_to_wav(segment, output_dir):
-    """Convert a segment to WAV format using ffmpeg."""
-    input_path = segment['path']
-    style = segment['style'].replace('/', '_').replace(' ', '_')
-    
-    # Create style subdirectory
-    style_dir = output_dir / style
-    style_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Output path
-    output_name = input_path.stem + '.wav'
-    output_path = style_dir / output_name
-    
-    if output_path.exists():
-        return output_path, "skipped"
-    
-    try:
-        # Use ffmpeg to convert
-        cmd = [
-            'ffmpeg', '-y', '-i', str(input_path),
-            '-ar', str(SAMPLE_RATE),
-            '-ac', str(CHANNELS),
-            '-acodec', 'pcm_s16le',
-            str(output_path)
-        ]
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode != 0:
-            return None, f"ffmpeg error: {result.stderr[:200]}"
-            
-        return output_path, "converted"
-        
-    except Exception as e:
-        return None, str(e)
-
-
-def main():
-    print("🎵 Preparing training data for RAVE")
-    print("=" * 50)
-    
-    # Find segments
-    print("\n[1] Finding analyzed segments...")
-    segments = find_segments()
-    
-    if not segments:
-        print("No segments found. Please run analysis in MusicMill first.")
-        sys.exit(1)
-    
-    print(f"    Found {len(segments)} segments")
-    
-    # Show style breakdown
-    styles = {}
-    for seg in segments:
-        style = seg['style']
-        styles[style] = styles.get(style, 0) + 1
-    
-    print("\n    Breakdown by style:")
-    for style, count in sorted(styles.items()):
-        print(f"      {style}: {count} segments")
-    
-    # Create output directory
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"\n[2] Converting to WAV format...")
-    print(f"    Output: {OUTPUT_DIR}")
-    
-    # Convert in parallel
-    converted = 0
-    skipped = 0
-    failed = 0
-    
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {
-            executor.submit(convert_to_wav, seg, OUTPUT_DIR): seg
-            for seg in segments
-        }
-        
-        for future in as_completed(futures):
-            result, status = future.result()
-            if status == "converted":
-                converted += 1
-            elif status == "skipped":
-                skipped += 1
-            else:
-                failed += 1
-                seg = futures[future]
-                print(f"    ❌ Failed: {seg['path'].name} - {status}")
-            
-            # Progress
-            done = converted + skipped + failed
-            if done % 10 == 0:
-                print(f"    Progress: {done}/{len(segments)}")
-    
-    print(f"\n[3] Summary:")
-    print(f"    Converted: {converted}")
-    print(f"    Skipped (already exists): {skipped}")
-    print(f"    Failed: {failed}")
-    
-    # Calculate total duration
+def get_total_duration(files):
+    """Calculate total duration of audio files using ffprobe."""
     total_duration = 0
-    for wav_file in OUTPUT_DIR.rglob("*.wav"):
+    for f in files:
         try:
-            # Get duration using ffprobe
             result = subprocess.run(
                 ['ffprobe', '-v', 'error', '-show_entries', 
                  'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1',
-                 str(wav_file)],
+                 str(f)],
                 capture_output=True,
                 text=True
             )
@@ -179,18 +72,154 @@ def main():
                 total_duration += float(result.stdout.strip())
         except:
             pass
+    return total_duration
+
+
+def run_rave_preprocess(input_path: Path, output_path: Path, lazy: bool = True):
+    """Run RAVE preprocessing."""
+    cmd = [
+        'rave', 'preprocess',
+        '--input_path', str(input_path),
+        '--output_path', str(output_path),
+    ]
     
-    hours = total_duration / 3600
-    print(f"\n    Total audio: {hours:.1f} hours ({total_duration/60:.0f} minutes)")
+    if lazy:
+        cmd.append('--lazy')
     
-    if hours < 1:
+    print(f"\n    Running: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd)
+        return result.returncode == 0
+    except FileNotFoundError:
+        print("❌ RAVE not found. Install it with: pip install acids-rave")
+        print("   Or run: ./scripts/setup_rave.sh")
+        return False
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Prepare training data for RAVE neural audio synthesis',
+        epilog='Uses lazy preprocessing to train directly on MP3/OGG files.'
+    )
+    parser.add_argument(
+        '--input', '-i', type=Path,
+        help='Input directory containing audio files (MP3, OGG, WAV, etc.)'
+    )
+    parser.add_argument(
+        '--output', '-o', type=Path, default=PREPROCESSED_DIR,
+        help=f'Output directory for preprocessed data (default: {PREPROCESSED_DIR})'
+    )
+    parser.add_argument(
+        '--use-segments', action='store_true',
+        help='Use MusicMill analyzed segments instead of raw files'
+    )
+    parser.add_argument(
+        '--no-lazy', action='store_true',
+        help='Disable lazy loading (converts files first, uses less CPU during training)'
+    )
+    args = parser.parse_args()
+    
+    print("🎵 Preparing training data for RAVE")
+    print("=" * 50)
+    
+    lazy_mode = not args.no_lazy
+    if lazy_mode:
+        print("\n📦 Using LAZY mode - training directly on MP3/OGG files")
+        print("   (Higher CPU usage during training, but no conversion needed)")
+    else:
+        print("\n📦 Using EAGER mode - converting files first")
+        print("   (Lower CPU usage during training)")
+    
+    # Determine input source
+    if args.use_segments:
+        print("\n[1] Finding MusicMill analyzed segments...")
+        audio_files = find_musicmill_segments()
+        if not audio_files:
+            print("❌ No segments found. Run analysis in MusicMill first.")
+            sys.exit(1)
+        
+        # Create a temp directory with symlinks to segments
+        input_dir = args.output.parent / "rave_input_segments"
+        input_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"    Creating symlinks in {input_dir}...")
+        for f in audio_files:
+            link = input_dir / f.name
+            if not link.exists():
+                link.symlink_to(f)
+        
+    elif args.input:
+        input_dir = args.input
+        print(f"\n[1] Scanning audio files in {input_dir}...")
+        audio_files = find_audio_files(input_dir)
+        
+        if not audio_files:
+            print(f"❌ No audio files found in {input_dir}")
+            sys.exit(1)
+    else:
+        # Default: look for common music directories
+        possible_dirs = [
+            Path.home() / "Music",
+            Path.home() / "Music" / "PioneerDJ" / "Imported from Device" / "Contents",
+            ANALYSIS_DIR,
+        ]
+        
+        for d in possible_dirs:
+            if d.exists():
+                audio_files = find_audio_files(d)
+                if audio_files:
+                    input_dir = d
+                    print(f"\n[1] Found audio files in {input_dir}")
+                    break
+        else:
+            print("❌ No audio files found. Specify input with --input /path/to/music")
+            sys.exit(1)
+    
+    print(f"    Found {len(audio_files)} audio files")
+    
+    # Show file type breakdown
+    extensions = {}
+    for f in audio_files:
+        ext = f.suffix.lower()
+        extensions[ext] = extensions.get(ext, 0) + 1
+    
+    print("\n    File types:")
+    for ext, count in sorted(extensions.items(), key=lambda x: -x[1]):
+        print(f"      {ext}: {count}")
+    
+    # Calculate duration
+    print("\n[2] Calculating total duration...")
+    duration = get_total_duration(audio_files[:100])  # Sample first 100 for speed
+    if len(audio_files) > 100:
+        # Estimate total from sample
+        duration = duration * len(audio_files) / 100
+        print(f"    Estimated: {duration/3600:.1f} hours ({duration/60:.0f} minutes)")
+    else:
+        print(f"    Total: {duration/3600:.1f} hours ({duration/60:.0f} minutes)")
+    
+    if duration / 3600 < 1:
         print("\n⚠️  Warning: RAVE works best with 2+ hours of audio.")
         print("    Consider adding more music to your collection.")
+    elif duration / 3600 > 10:
+        print(f"\n✓ Great! {duration/3600:.0f} hours is plenty for training.")
     
-    print(f"\n✓ Training data prepared at: {OUTPUT_DIR}")
-    print("\nNext step: python scripts/train_rave.py")
+    # Run RAVE preprocessing
+    print(f"\n[3] Running RAVE preprocessing...")
+    args.output.mkdir(parents=True, exist_ok=True)
+    
+    success = run_rave_preprocess(input_dir, args.output, lazy=lazy_mode)
+    
+    if success:
+        print("\n" + "=" * 50)
+        print("✓ Preprocessing complete!")
+        print(f"  Output: {args.output}")
+        print("\nNext step:")
+        print(f"  python scripts/train_rave.py --db_path {args.output}")
+    else:
+        print("\n❌ Preprocessing failed")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
-
