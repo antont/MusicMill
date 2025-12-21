@@ -7,9 +7,20 @@ struct PerformanceView: View {
     @StateObject private var mixingEngine = MixingEngine()
     @EnvironmentObject var modelManager: ModelManager
     
+    // Generation components
+    @StateObject private var generationController = {
+        let granularSynthesizer = GranularSynthesizer()
+        let sampleLibrary = SampleLibrary()
+        let sampleGenerator = SampleGenerator(granularSynthesizer: granularSynthesizer, sampleLibrary: sampleLibrary)
+        let neuralGenerator = NeuralGenerator()
+        let synthesisEngine = SynthesisEngine(sampleGenerator: sampleGenerator, neuralGenerator: neuralGenerator)
+        return GenerationController(synthesisEngine: synthesisEngine)
+    }()
+    
     @State private var selectedTempo: Double = 120.0
     @State private var selectedEnergy: Double = 0.5
     @State private var selectedTrack: TrackSelector.Track?
+    @State private var isGenerating = false
     
     var body: some View {
         HStack(spacing: 0) {
@@ -67,9 +78,54 @@ struct PerformanceView: View {
                 
                 Divider()
                 
-                // Playback controls
+                Divider()
+                
+                // Generation mode
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Playback")
+                    Text("Generation Mode")
+                        .font(.headline)
+                    Picker("Mode", selection: $generationController.mode) {
+                        Text("Granular").tag(SynthesisEngine.GenerationMode.granular)
+                        Text("Neural").tag(SynthesisEngine.GenerationMode.neural)
+                        Text("Hybrid").tag(SynthesisEngine.GenerationMode.hybrid)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                
+                Divider()
+                
+                // Generation controls
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Generation")
+                        .font(.headline)
+                    HStack {
+                        Button(action: {
+                            if isGenerating {
+                                generationController.stop()
+                                isGenerating = false
+                            } else {
+                                do {
+                                    try generationController.start()
+                                    isGenerating = true
+                                } catch {
+                                    print("Failed to start generation: \(error)")
+                                }
+                            }
+                        }) {
+                            Image(systemName: isGenerating ? "stop.fill" : "play.fill")
+                                .font(.title2)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        
+                        Spacer()
+                    }
+                }
+                
+                Divider()
+                
+                // Playback controls (for debug/example tracks)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Playback (Debug)")
                         .font(.headline)
                     HStack {
                         Button(action: {
@@ -120,13 +176,16 @@ struct PerformanceView: View {
         .onAppear {
             setupPerformance()
         }
-        .onChange(of: styleController.selectedStyle) { _ in
+        .onChange(of: styleController.selectedStyle) { newStyle in
+            generationController.style = newStyle
             updateRecommendations()
         }
-        .onChange(of: selectedTempo) { _ in
+        .onChange(of: selectedTempo) { newTempo in
+            generationController.tempo = newTempo
             updateRecommendations()
         }
-        .onChange(of: selectedEnergy) { _ in
+        .onChange(of: selectedEnergy) { newEnergy in
+            generationController.energy = newEnergy
             updateRecommendations()
         }
     }

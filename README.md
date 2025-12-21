@@ -23,21 +23,27 @@ The generative model learns from your DJ collection using:
 
 ## Features
 
-### Current (Skeleton)
-- **Music Collection Analysis**: Scans and analyzes your DJ collection, supporting MP3, AAC, WAV, AIFF formats
-- **Style Classification**: Trains MLSoundClassifier models to identify musical styles/genres from your collection
-- **Track Classification**: Automatically classifies tracks when loading your collection (helper/debug feature)
-- **Performance Interface**: UI scaffolding for style/tempo/energy controls
+### Working
+- **Music Collection Analysis**: Scans directories for audio files (MP3, AAC, WAV, AIFF, M4A)
+- **Segment Extraction**: Extracts 30-second training segments from tracks
+- **Persistent Storage**: Saves analysis results to `~/Documents/MusicMill/Analysis/`
+- **Basic Feature Extraction**: Energy, zero crossing rate, RMS energy
+- **Performance Interface**: UI for style/tempo/energy controls
 
-### Planned (Primary Goals)
-- **Real-time Generative Synthesis**: Generate new audio segments based on learned styles
-- **Style-guided Generation**: Control output style using trained classification models
-- **Tempo/Energy Control**: Direct the generative model's tempo and energy characteristics
-- **Live Performance Controls**: Real-time mixing, crossfading, and effects
+### In Progress
+- **Tempo Detection**: Implementing autocorrelation-based BPM detection
+- **Key Detection**: Implementing chromagram-based key analysis
+- **Granular Synthesis**: Rewriting for proper real-time audio output
 
-### Helper/Debug Features
-- **Track Recommendations**: Show example tracks/segments matching current desired output (for debugging/verification)
-- **Collection Analysis**: Understand what styles exist in your collection
+### Planned
+- **Real-time Generative Synthesis**: Generate new audio using granular synthesis
+- **Style-guided Generation**: Control output style using classification
+- **Neural Synthesis**: Pure neural audio generation (future, requires more data)
+
+### Known Limitations
+- DRM-protected files (Apple Music M4A) cannot be analyzed
+- Tempo/key detection currently returns null (being fixed)
+- Granular synthesizer is skeleton-only (being rewritten)
 
 ## Architecture
 

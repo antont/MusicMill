@@ -11,6 +11,7 @@
 		35AACBAD2EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 in Resources */ = {isa = PBXBuildFile; fileRef = 35AACB942EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 */; };
 		35AACBAE2EF704C7003DAD74 /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9C2EF704C7003DAD74 /* ModelManager.swift */; };
 		35AACBAF2EF704C7003DAD74 /* TrainingDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */; };
+		636630666630666161366463 /* AnalysisStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 303738666235333938653064 /* AnalysisStorage.swift */; };
 		35AACBB02EF704C7003DAD74 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA52EF704C7003DAD74 /* TrainingView.swift */; };
 		35AACBB12EF704C7003DAD74 /* StyleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA22EF704C7003DAD74 /* StyleController.swift */; };
 		35AACBB22EF704C7003DAD74 /* AudioAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */; };
@@ -22,6 +23,17 @@
 		35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA02EF704C7003DAD74 /* PerformanceView.swift */; };
 		35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */; };
 		35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */; };
+		A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */; };
+		84BEB3047D4EF3576A123C72 /* SpectralAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */; };
+		86AE3BD42F18D543459919C7 /* StructureAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */; };
+		F9301E75860C9295F17748A1 /* RekordboxParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */; };
+		3CD4BAD69E188054EE1D1281 /* GenerativeModelTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */; };
+		615522429CA5A1392DD0C831 /* GenerationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90CE387D266B165E2B7F55D7 /* GenerationController.swift */; };
+		49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */; };
+		A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */; };
+		E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */; };
+		D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */; };
+		8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,6 +57,7 @@
 		35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioAnalyzer.swift; sourceTree = "<group>"; };
 		35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureExtractor.swift; sourceTree = "<group>"; };
 		35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingDataManager.swift; sourceTree = "<group>"; };
+		303738666235333938653064 /* AnalysisStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisStorage.swift; sourceTree = "<group>"; };
 		35AACB8F2EF704C7003DAD74 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		35AACB902EF704C7003DAD74 /* MusicMillApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicMillApp.swift; sourceTree = "<group>"; };
 		35AACB942EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "fenv.h-3VT5MAIXTIKH7"; sourceTree = "<group>"; };
@@ -61,6 +74,17 @@
 		35D5294A2EF6FE940048C1C9 /* MusicMill.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MusicMill.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		35D529592EF6FE950048C1C9 /* MusicMillTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MusicMillTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		35D529632EF6FE950048C1C9 /* MusicMillUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MusicMillUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentExtractor.swift; sourceTree = "<group>"; };
+		89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectralAnalyzer.swift; sourceTree = "<group>"; };
+		8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructureAnalyzer.swift; sourceTree = "<group>"; };
+		1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekordboxParser.swift; sourceTree = "<group>"; };
+		717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerativeModelTrainer.swift; sourceTree = "<group>"; };
+		90CE387D266B165E2B7F55D7 /* GenerationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationController.swift; sourceTree = "<group>"; };
+		D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularSynthesizer.swift; sourceTree = "<group>"; };
+		B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleLibrary.swift; sourceTree = "<group>"; };
+		E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleGenerator.swift; sourceTree = "<group>"; };
+		59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralGenerator.swift; sourceTree = "<group>"; };
+		C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisEngine.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -107,7 +131,12 @@
 				35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */,
 				35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */,
 				35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */,
-			);
+					303738666235333938653064 /* AnalysisStorage.swift */,
+							FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */,
+				89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */,
+				8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */,
+				1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */,
+);
 			path = Analysis;
 			sourceTree = "<group>";
 		};
@@ -180,7 +209,8 @@
 			children = (
 				35AACB9C2EF704C7003DAD74 /* ModelManager.swift */,
 				35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */,
-			);
+							717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */,
+);
 			path = ML;
 			sourceTree = "<group>";
 		};
@@ -192,8 +222,21 @@
 				35AACBA12EF704C7003DAD74 /* PlaybackController.swift */,
 				35AACBA22EF704C7003DAD74 /* StyleController.swift */,
 				35AACBA32EF704C7003DAD74 /* TrackSelector.swift */,
-			);
+							90CE387D266B165E2B7F55D7 /* GenerationController.swift */,
+);
 			path = Performance;
+			sourceTree = "<group>";
+		};
+		D1DE63D3E15EC9D5B93CB6F6 /* Generation */ = {
+			isa = PBXGroup;
+			children = (
+				D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */,
+				B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */,
+				E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */,
+				59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */,
+				C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */,
+			);
+			path = Generation;
 			sourceTree = "<group>";
 		};
 		35AACBA62EF704C7003DAD74 /* Training */ = {
@@ -213,9 +256,9 @@
 				35AACB9A2EF704C7003DAD74 /* DerivedData */,
 				35AACB9E2EF704C7003DAD74 /* ML */,
 				35AACBA42EF704C7003DAD74 /* Performance */,
+				D1DE63D3E15EC9D5B93CB6F6 /* Generation */,
 				35AACBA62EF704C7003DAD74 /* Training */,
 				35AACBA72EF704C7003DAD74 /* Assets.xcassets */,
-				35AACBA82EF704C7003DAD74 /* MusicMill.xcodeproj */,
 			);
 			path = MusicMill;
 			sourceTree = "<group>";
@@ -398,6 +441,7 @@
 			files = (
 				35AACBAE2EF704C7003DAD74 /* ModelManager.swift in Sources */,
 				35AACBAF2EF704C7003DAD74 /* TrainingDataManager.swift in Sources */,
+				636630666630666161366463 /* AnalysisStorage.swift in Sources */,
 				35AACBB02EF704C7003DAD74 /* TrainingView.swift in Sources */,
 				35AACBB12EF704C7003DAD74 /* StyleController.swift in Sources */,
 				35AACBB22EF704C7003DAD74 /* AudioAnalyzer.swift in Sources */,
@@ -409,7 +453,18 @@
 				35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */,
 				35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */,
 				35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */,
-			);
+							A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */,
+				84BEB3047D4EF3576A123C72 /* SpectralAnalyzer.swift in Sources */,
+				86AE3BD42F18D543459919C7 /* StructureAnalyzer.swift in Sources */,
+				F9301E75860C9295F17748A1 /* RekordboxParser.swift in Sources */,
+				3CD4BAD69E188054EE1D1281 /* GenerativeModelTrainer.swift in Sources */,
+				615522429CA5A1392DD0C831 /* GenerationController.swift in Sources */,
+				49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */,
+				A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */,
+				E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */,
+				D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */,
+				8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		35D529552EF6FE950048C1C9 /* Sources */ = {

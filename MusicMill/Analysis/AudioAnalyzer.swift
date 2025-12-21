@@ -51,9 +51,14 @@ class AudioAnalyzer {
                 continue
             }
             
-            if let format = AudioFormat(rawValue: pathExtension),
-               let duration = try? await getAudioDuration(url: fileURL) {
-                audioFiles.append(AudioFile(url: fileURL, duration: duration, format: format))
+            if let format = AudioFormat(rawValue: pathExtension) {
+                // Try to get duration - if it fails, the file might be DRM-protected or corrupted
+                if let duration = try? await getAudioDuration(url: fileURL) {
+                    audioFiles.append(AudioFile(url: fileURL, duration: duration, format: format))
+                } else {
+                    // Log but continue - file might be DRM-protected (common with Apple Music)
+                    print("Warning: Could not read \(fileURL.lastPathComponent) - may be DRM-protected or corrupted")
+                }
             }
         }
         
@@ -62,7 +67,7 @@ class AudioAnalyzer {
     
     /// Extracts audio segments for training (default: 30-second clips)
     func extractTrainingSegments(from audioFile: AudioFile, segmentDuration: TimeInterval = 30.0) async throws -> [URL] {
-        let asset = AVAsset(url: audioFile.url)
+        let asset = AVURLAsset(url: audioFile.url)
         let duration = try await asset.load(.duration)
         let totalDuration = CMTimeGetSeconds(duration)
         
@@ -90,7 +95,7 @@ class AudioAnalyzer {
     
     /// Extracts a specific segment from an audio file
     private func extractSegment(from url: URL, startTime: TimeInterval, duration: TimeInterval) async throws -> URL {
-        let asset = AVAsset(url: url)
+        let asset = AVURLAsset(url: url)
         let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A)
         
         guard let exportSession = exportSession else {
@@ -119,7 +124,7 @@ class AudioAnalyzer {
     
     /// Gets the duration of an audio file
     private func getAudioDuration(url: URL) async throws -> TimeInterval {
-        let asset = AVAsset(url: url)
+        let asset = AVURLAsset(url: url)
         let duration = try await asset.load(.duration)
         return CMTimeGetSeconds(duration)
     }

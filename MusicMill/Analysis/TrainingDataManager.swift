@@ -8,6 +8,8 @@ class TrainingDataManager: ObservableObject {
     @Published var progress: Double = 0.0
     @Published var currentStatus: String = ""
     
+    private let storage = AnalysisStorage()
+    
     struct TrainingSample {
         let audioURL: URL
         let label: String // Style/genre label
@@ -39,7 +41,8 @@ class TrainingDataManager: ObservableObject {
     func prepareTrainingSamples(
         from organizedFiles: [String: [AudioAnalyzer.AudioFile]],
         analyzer: AudioAnalyzer,
-        featureExtractor: FeatureExtractor
+        featureExtractor: FeatureExtractor,
+        collectionURL: URL? = nil
     ) async {
         await MainActor.run {
             isProcessing = true
@@ -65,9 +68,28 @@ class TrainingDataManager: ObservableObject {
                     if let firstSegment = segments.first {
                         let features = try? await featureExtractor.extractFeatures(from: firstSegment)
                         
-                        for segment in segments {
+                        for (index, segment) in segments.enumerated() {
+                            // Save segment to persistent storage if collection URL is provided
+                            let finalSegmentURL: URL
+                            if let collectionURL = collectionURL {
+                                do {
+                                    finalSegmentURL = try storage.saveSegment(
+                                        segmentURL: segment,
+                                        sourceFile: file.url,
+                                        collectionURL: collectionURL,
+                                        label: label,
+                                        segmentIndex: index
+                                    )
+                                } catch {
+                                    print("Warning: Could not save segment to persistent storage: \(error)")
+                                    finalSegmentURL = segment
+                                }
+                            } else {
+                                finalSegmentURL = segment
+                            }
+                            
                             samples.append(TrainingSample(
-                                audioURL: segment,
+                                audioURL: finalSegmentURL,
                                 label: label,
                                 features: features,
                                 sourceFile: file.url
@@ -91,6 +113,32 @@ class TrainingDataManager: ObservableObject {
             currentStatus = "Ready: \(samples.count) training samples"
             progress = 1.0
         }
+    }
+    
+    /// Saves analysis results to persistent storage
+    func saveAnalysis(
+        collectionURL: URL,
+        audioFiles: [AudioAnalyzer.AudioFile],
+        organizedStyles: [String: [AudioAnalyzer.AudioFile]]
+    ) async throws {
+        // Access trainingData on main actor
+        let samples = await MainActor.run { trainingData }
+        try storage.saveAnalysis(
+            collectionURL: collectionURL,
+            audioFiles: audioFiles,
+            organizedStyles: organizedStyles,
+            trainingSamples: samples
+        )
+    }
+    
+    /// Loads previously saved analysis results
+    func loadAnalysis(for collectionURL: URL) throws -> AnalysisStorage.AnalysisResult? {
+        return try storage.loadAnalysis(for: collectionURL)
+    }
+    
+    /// Checks if analysis exists for a collection
+    func hasAnalysis(for collectionURL: URL) -> Bool {
+        return storage.hasAnalysis(for: collectionURL)
     }
     
     /// Gets unique labels from training data

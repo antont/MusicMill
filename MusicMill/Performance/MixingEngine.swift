@@ -3,16 +3,29 @@ import AVFoundation
 import Combine
 
 /// Handles real-time audio mixing with crossfade, volume, and EQ
+/// Now supports both generated audio and track playback
 class MixingEngine: ObservableObject {
     private var audioEngine: AVAudioEngine
     private var players: [AVAudioPlayerNode] = []
     private var files: [AVAudioFile] = []
     private var mixerNode: AVAudioMixerNode
     private var eqNodes: [AVAudioUnitEQ] = []
+    private var generationInput: AVAudioNode?
     
     init() {
         audioEngine = AVAudioEngine()
         mixerNode = audioEngine.mainMixerNode
+    }
+    
+    /// Connects generated audio input to the mixer
+    func connectGenerationInput(_ node: AVAudioNode, format: AVAudioFormat) {
+        if let existingInput = generationInput {
+            audioEngine.disconnectNodeInput(existingInput)
+        }
+        
+        generationInput = node
+        audioEngine.attach(node)
+        audioEngine.connect(node, to: mixerNode, format: format)
     }
     
     /// Adds a track to the mixer

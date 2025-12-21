@@ -2,81 +2,55 @@
 name: MusicMill Generative Synthesis System
 overview: Comprehensive plan for building a generative music instrument that synthesizes new audio in real-time from a DJ collection. Explores multiple generation approaches (sample-based with granular synthesis, pure neural synthesis, hybrid) with flexible analysis architecture. Focuses on synthesizer-based music (synthwave, darkwave) where pure synthesis may be more feasible than acoustic music.
 todos:
+  # IMMEDIATE PRIORITY - Fix core analysis
+  - id: fix_tempo_detection
+    content: "Implement proper tempo detection using autocorrelation (currently returns nil)"
+    status: in_progress
+  - id: fix_key_detection
+    content: "Implement key detection using chromagram analysis (currently returns nil)"
+    status: pending
+  - id: fix_spectral_centroid
+    content: "Fix spectral centroid calculation - use proper FFT (current values ~512 are wrong)"
+    status: pending
+  
+  # PRIORITY 2 - Get granular synthesis working
+  - id: rewrite_granular
+    content: "Rewrite GranularSynthesizer with render callback, grain pool, AVAudioTime scheduling"
+    status: pending
+  - id: connect_sample_library
+    content: "Load analyzed segments into SampleLibrary for granular synthesis"
+    status: pending
+  - id: test_audio_output
+    content: "Test and verify granular synthesis produces actual sound output"
+    status: pending
+
+  # DEFERRED - Skeletons exist, expand when needed
   - id: expand_analysis
     content: "Expand analysis pipeline to extract multiple feature types: segments, spectral representations, musical structure, and Rekordbox metadata"
-    status: pending
+    status: skeleton
   - id: segment_extraction
     content: Implement SegmentExtractor to identify meaningful segments (beats, phrases, loops) from tracks with style classification per segment
-    status: pending
-    dependencies:
-      - expand_analysis
+    status: skeleton
   - id: spectral_analysis
     content: Implement SpectralAnalyzer for mel-spectrograms, chromagrams, and features needed for neural generation approaches
-    status: pending
-    dependencies:
-      - expand_analysis
+    status: skeleton
   - id: structure_analysis
     content: Implement StructureAnalyzer to detect chord progressions, phrase boundaries, and section structure (intro, verse, chorus)
-    status: pending
-    dependencies:
-      - expand_analysis
+    status: skeleton
   - id: rekordbox_parser
     content: Implement RekordboxParser to extract cue points, play history, play counts, and other metadata from Rekordbox collection
-    status: pending
-    dependencies:
-      - expand_analysis
-  - id: granular_synthesis_research
-    content: Research Swift/AVFoundation vs SuperCollider for granular synthesis implementation, evaluate tradeoffs and integration approaches
-    status: pending
-  - id: granular_synthesizer
-    content: Implement GranularSynthesizer for real-time granular synthesis - grain generation, scheduling, windowing, and parameter control
-    status: pending
-    dependencies:
-      - granular_synthesis_research
-      - segment_extraction
-  - id: sample_library
-    content: Implement SampleLibrary to catalog and index segments with metadata (style, tempo, key, features) for efficient matching and retrieval
-    status: pending
-    dependencies:
-      - segment_extraction
-  - id: sample_generator
-    content: "Implement SampleGenerator using granular synthesis: real-time grain scheduling, style/tempo/key matching, smooth transitions between samples"
-    status: pending
-    dependencies:
-      - granular_synthesizer
-      - sample_library
+    status: skeleton
+  
+  # FUTURE - Neural synthesis (requires more data & research)
   - id: neural_generator_research
     content: Research neural audio generation approaches suitable for real-time synthesis (VAE, GAN, Diffusion, Transformer-based)
-    status: pending
-    dependencies:
-      - spectral_analysis
+    status: future
   - id: generative_model_trainer
     content: Implement GenerativeModelTrainer to train models for audio synthesis using collection data (supports multiple architectures)
-    status: pending
-    dependencies:
-      - neural_generator_research
-      - spectral_analysis
+    status: skeleton
   - id: neural_generator
     content: "Implement NeuralGenerator for pure synthesis: real-time audio generation from neural models with style/tempo/energy conditioning"
-    status: pending
-    dependencies:
-      - generative_model_trainer
-  - id: synthesis_engine
-    content: Implement SynthesisEngine as unified interface for real-time audio generation, supporting granular, neural, and hybrid approaches
-    status: pending
-    dependencies:
-      - sample_generator
-      - neural_generator
-  - id: generation_controller
-    content: Implement GenerationController to connect performance controls (style/tempo/energy) to synthesis engine with low-latency parameter updates
-    status: pending
-    dependencies:
-      - synthesis_engine
-  - id: integrate_generation
-    content: Update PerformanceView and MixingEngine to use generated audio instead of just track playback, connect all components together
-    status: pending
-    dependencies:
-      - generation_controller
+    status: skeleton
 ---
 
 # MusicMill: Generative Music Synthesis System
