@@ -575,6 +575,9 @@ struct MusicMillTests {
         Zero Crossing Rate: \(String(format: "%.4f", source.zeroCrossingRate))
         RMS Energy: \(String(format: "%.4f", source.rmsEnergy))
         Duration: \(String(format: "%.2f sec", source.duration))
+        Spectral Flatness: \(String(format: "%.4f", source.spectralFlatness)) (0=tonal, 1=noise)
+        HNR: \(String(format: "%.1f dB", source.harmonicToNoiseRatio)) (higher=cleaner)
+        Onset Regularity: \(String(format: "%.4f", source.onsetRegularity)) (0=regular, 1=chaotic)
         
         OUTPUT AUDIO (Granular Synthesis)
         ---------------------------------
@@ -586,6 +589,9 @@ struct MusicMillTests {
         Zero Crossing Rate: \(String(format: "%.4f", outputFeatures.zeroCrossingRate))
         RMS Energy: \(String(format: "%.4f", outputFeatures.rmsEnergy))
         Duration: \(String(format: "%.2f sec", outputFeatures.duration))
+        Spectral Flatness: \(String(format: "%.4f", outputFeatures.spectralFlatness)) (0=tonal, 1=noise)
+        HNR: \(String(format: "%.1f dB", outputFeatures.harmonicToNoiseRatio)) (higher=cleaner)
+        Onset Regularity: \(String(format: "%.4f", outputFeatures.onsetRegularity)) (0=regular, 1=chaotic)
         
         QUALITY SCORES
         --------------
@@ -609,6 +615,11 @@ struct MusicMillTests {
           Energy Match:   \(String(format: "%5.1f%%", quality.energyMatch * 100))
           Spectral Match: \(String(format: "%5.1f%%", quality.spectralMatch * 100))
           Texture Match:  \(String(format: "%5.1f%%", quality.textureMatch * 100))
+        
+        PERCEPTUAL QUALITY (New Metrics)
+          Noise Match:    \(String(format: "%5.1f%%", quality.noiseMatch * 100)) (higher=less noisy than source)
+          Clarity Match:  \(String(format: "%5.1f%%", quality.clarityMatch * 100)) (higher=cleaner audio)
+          Rhythm Match:   \(String(format: "%5.1f%%", quality.rhythmMatch * 100)) (higher=more rhythmic)
         
         QUALITY TARGETS
         ---------------

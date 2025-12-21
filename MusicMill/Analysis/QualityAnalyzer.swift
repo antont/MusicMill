@@ -16,6 +16,11 @@ class QualityAnalyzer {
         let spectralMatch: Double  // Closeness of brightness
         let textureMatch: Double   // Zero crossing rate similarity
         
+        // Perceptual quality metrics
+        let noiseMatch: Double     // Based on spectral flatness - higher = less noisy than source
+        let clarityMatch: Double   // Based on HNR - higher = cleaner audio
+        let rhythmMatch: Double    // Based on onset regularity - higher = more rhythmic
+        
         var description: String {
             var lines = ["Quality Score: \(String(format: "%.2f", overall * 100))%"]
             if let tempo = tempoMatch {
@@ -27,6 +32,9 @@ class QualityAnalyzer {
             lines.append("  Energy: \(String(format: "%.2f", energyMatch * 100))%")
             lines.append("  Spectral: \(String(format: "%.2f", spectralMatch * 100))%")
             lines.append("  Texture: \(String(format: "%.2f", textureMatch * 100))%")
+            lines.append("  Noise: \(String(format: "%.2f", noiseMatch * 100))%")
+            lines.append("  Clarity: \(String(format: "%.2f", clarityMatch * 100))%")
+            lines.append("  Rhythm: \(String(format: "%.2f", rhythmMatch * 100))%")
             return lines.joined(separator: "\n")
         }
     }
@@ -34,17 +42,34 @@ class QualityAnalyzer {
     // MARK: - Comparison Weights
     
     struct ComparisonWeights {
-        var tempo: Double = 0.20
-        var key: Double = 0.15
-        var energy: Double = 0.25
-        var spectral: Double = 0.25
-        var texture: Double = 0.15
+        // Original metrics (reduced weights to accommodate new ones)
+        var tempo: Double = 0.10
+        var key: Double = 0.10
+        var energy: Double = 0.10
+        var spectral: Double = 0.10
+        var texture: Double = 0.10
         
-        /// Default weights
+        // Perceptual quality metrics (higher weights - these matter more for audio quality)
+        var noise: Double = 0.20      // Spectral flatness - penalize noisy output
+        var clarity: Double = 0.20    // HNR - reward clean harmonic content
+        var rhythm: Double = 0.10     // Onset regularity - reward rhythmic coherence
+        
+        /// Default weights balanced between musical and perceptual quality
         static let `default` = ComparisonWeights()
         
         /// Weights focusing on timbral qualities (for when tempo/key aren't relevant)
-        static let timbral = ComparisonWeights(tempo: 0.0, key: 0.0, energy: 0.35, spectral: 0.40, texture: 0.25)
+        static let timbral = ComparisonWeights(
+            tempo: 0.0, key: 0.0, 
+            energy: 0.15, spectral: 0.15, texture: 0.10,
+            noise: 0.25, clarity: 0.25, rhythm: 0.10
+        )
+        
+        /// Weights focusing on perceptual quality (artifacts, noise, rhythm)
+        static let perceptual = ComparisonWeights(
+            tempo: 0.05, key: 0.05,
+            energy: 0.05, spectral: 0.05, texture: 0.05,
+            noise: 0.30, clarity: 0.30, rhythm: 0.15
+        )
     }
     
     // MARK: - Musical Key Relationships
@@ -128,6 +153,63 @@ class QualityAnalyzer {
             textureMatch = 0.0
         }
         
+        // MARK: - Perceptual Quality Metrics
+        
+        // Noise match: Compare spectral flatness
+        // Lower flatness = more tonal = better for music
+        // We want output to be similar to or less noisy than source
+        let noiseMatch: Double
+        if source.spectralFlatness > 0 {
+            // If output is less noisy (lower flatness), that's good (score up to 1.0)
+            // If output is more noisy (higher flatness), penalize it
+            if output.spectralFlatness <= source.spectralFlatness {
+                // Output is less noisy or equal - good!
+                noiseMatch = 1.0
+            } else {
+                // Output is noisier - penalize based on how much noisier
+                let noiseDiff = output.spectralFlatness - source.spectralFlatness
+                noiseMatch = max(0, 1.0 - noiseDiff * 2.0) // Amplify penalty
+            }
+        } else {
+            noiseMatch = output.spectralFlatness < 0.5 ? 1.0 : 0.5 // Default: low flatness is good
+        }
+        
+        // Clarity match: Compare HNR (harmonic-to-noise ratio)
+        // Higher HNR = cleaner audio
+        // We want output to have similar or higher HNR than source
+        let clarityMatch: Double
+        if source.harmonicToNoiseRatio > 0 {
+            // If output has higher or similar HNR, that's good
+            if output.harmonicToNoiseRatio >= source.harmonicToNoiseRatio * 0.8 {
+                clarityMatch = min(1.0, output.harmonicToNoiseRatio / source.harmonicToNoiseRatio)
+            } else {
+                // Output has significantly lower HNR - more artifacts
+                let hnrRatio = output.harmonicToNoiseRatio / source.harmonicToNoiseRatio
+                clarityMatch = max(0, hnrRatio)
+            }
+        } else {
+            // Default: higher HNR is better (normalize to 0-1 assuming max HNR of 30)
+            clarityMatch = min(1.0, output.harmonicToNoiseRatio / 20.0)
+        }
+        
+        // Rhythm match: Compare onset regularity
+        // Lower regularity value = more rhythmic (better for music)
+        // We want output to have similar or better rhythmic regularity
+        let rhythmMatch: Double
+        if source.onsetRegularity < 1.0 {
+            // If output is more regular (lower value), that's good
+            if output.onsetRegularity <= source.onsetRegularity {
+                rhythmMatch = 1.0
+            } else {
+                // Output is less regular - penalize
+                let irregularityDiff = output.onsetRegularity - source.onsetRegularity
+                rhythmMatch = max(0, 1.0 - irregularityDiff)
+            }
+        } else {
+            // Source itself is irregular - just check if output is reasonable
+            rhythmMatch = max(0, 1.0 - output.onsetRegularity)
+        }
+        
         // Calculate overall score
         var overallScore = 0.0
         var totalWeight = 0.0
@@ -151,6 +233,16 @@ class QualityAnalyzer {
         overallScore += textureMatch * weights.texture
         totalWeight += weights.texture
         
+        // Add perceptual quality metrics
+        overallScore += noiseMatch * weights.noise
+        totalWeight += weights.noise
+        
+        overallScore += clarityMatch * weights.clarity
+        totalWeight += weights.clarity
+        
+        overallScore += rhythmMatch * weights.rhythm
+        totalWeight += weights.rhythm
+        
         // Normalize by total weight
         if totalWeight > 0 {
             overallScore /= totalWeight
@@ -162,7 +254,10 @@ class QualityAnalyzer {
             keyMatch: keyMatch,
             energyMatch: energyMatch,
             spectralMatch: spectralMatch,
-            textureMatch: textureMatch
+            textureMatch: textureMatch,
+            noiseMatch: noiseMatch,
+            clarityMatch: clarityMatch,
+            rhythmMatch: rhythmMatch
         )
     }
     

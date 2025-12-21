@@ -20,6 +20,11 @@ class FeatureExtractor {
         let zeroCrossingRate: Double // Roughness
         let rmsEnergy: Double // Overall loudness
         let duration: TimeInterval
+        
+        // Perceptual quality metrics
+        let spectralFlatness: Double // 0-1, lower = more tonal (music-like), higher = noise-like
+        let harmonicToNoiseRatio: Double // dB, higher = cleaner audio, lower = more noise/artifacts
+        let onsetRegularity: Double // Std dev of inter-onset intervals, lower = more rhythmic
     }
     
     /// Extracts features from an audio file
@@ -46,6 +51,11 @@ class FeatureExtractor {
         let tempo = estimateTempoAutocorrelation(audioData: monoData)
         let key = estimateKeyChromagram(audioData: monoData)
         
+        // Perceptual quality metrics
+        let spectralFlatness = calculateSpectralFlatness(audioData: monoData)
+        let harmonicToNoiseRatio = calculateHarmonicToNoiseRatio(audioData: monoData)
+        let onsetRegularity = calculateOnsetRegularity(audioData: monoData)
+        
         return AudioFeatures(
             tempo: tempo,
             key: key,
@@ -53,7 +63,10 @@ class FeatureExtractor {
             spectralCentroid: spectralCentroid,
             zeroCrossingRate: zeroCrossingRate,
             rmsEnergy: rmsEnergy,
-            duration: durationSeconds
+            duration: durationSeconds,
+            spectralFlatness: spectralFlatness,
+            harmonicToNoiseRatio: harmonicToNoiseRatio,
+            onsetRegularity: onsetRegularity
         )
     }
     
@@ -68,7 +81,10 @@ class FeatureExtractor {
                 spectralCentroid: 0,
                 zeroCrossingRate: 0,
                 rmsEnergy: 0,
-                duration: 0
+                duration: 0,
+                spectralFlatness: 1.0, // Assume noise if no data
+                harmonicToNoiseRatio: 0,
+                onsetRegularity: 1.0 // Assume irregular
             )
         }
         
@@ -108,6 +124,11 @@ class FeatureExtractor {
         let tempo = estimateTempoAutocorrelation(audioData: analysisData)
         let key = estimateKeyChromagram(audioData: analysisData)
         
+        // Perceptual quality metrics
+        let spectralFlatness = calculateSpectralFlatness(audioData: analysisData)
+        let harmonicToNoiseRatio = calculateHarmonicToNoiseRatio(audioData: analysisData)
+        let onsetRegularity = calculateOnsetRegularity(audioData: analysisData)
+        
         return AudioFeatures(
             tempo: tempo,
             key: key,
@@ -115,7 +136,10 @@ class FeatureExtractor {
             spectralCentroid: spectralCentroid,
             zeroCrossingRate: zeroCrossingRate,
             rmsEnergy: rmsEnergy,
-            duration: durationSeconds
+            duration: durationSeconds,
+            spectralFlatness: spectralFlatness,
+            harmonicToNoiseRatio: harmonicToNoiseRatio,
+            onsetRegularity: onsetRegularity
         )
     }
     
@@ -579,6 +603,195 @@ class FeatureExtractor {
         let denominator = sqrt((n * sumA2 - sumA * sumA) * (n * sumB2 - sumB * sumB))
         
         return denominator > 0 ? numerator / denominator : 0
+    }
+    
+    // MARK: - Perceptual Quality Metrics
+    
+    /// Calculates spectral flatness (Wiener entropy)
+    /// Range: 0 (pure tone) to 1 (white noise)
+    /// Lower values indicate more tonal/musical content
+    private func calculateSpectralFlatness(audioData: [Float]) -> Double {
+        guard audioData.count >= fftSize else { return 0.5 }
+        
+        // Take a representative segment from the middle
+        let startIdx = max(0, audioData.count / 2 - fftSize / 2)
+        let segment = Array(audioData[startIdx..<min(startIdx + fftSize, audioData.count)])
+        
+        // Apply Hann window
+        var windowed = [Float](repeating: 0, count: fftSize)
+        for i in 0..<min(segment.count, fftSize) {
+            let window = Float(0.5 * (1.0 - cos(2.0 * Double.pi * Double(i) / Double(fftSize - 1))))
+            windowed[i] = segment[i] * window
+        }
+        
+        // Perform FFT
+        let log2n = vDSP_Length(log2(Double(fftSize)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            return 0.5
+        }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
+        
+        var real = [Float](repeating: 0, count: fftSize / 2)
+        var imag = [Float](repeating: 0, count: fftSize / 2)
+        
+        windowed.withUnsafeBufferPointer { windowedPtr in
+            real.withUnsafeMutableBufferPointer { realPtr in
+                imag.withUnsafeMutableBufferPointer { imagPtr in
+                    var splitComplex = DSPSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
+                    windowedPtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: fftSize / 2) { complexPtr in
+                        vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(fftSize / 2))
+                    }
+                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+                }
+            }
+        }
+        
+        // Calculate power spectrum
+        var magnitudes = [Float](repeating: 0, count: fftSize / 2)
+        real.withUnsafeBufferPointer { realPtr in
+            imag.withUnsafeBufferPointer { imagPtr in
+                var splitComplex = DSPSplitComplex(realp: UnsafeMutablePointer(mutating: realPtr.baseAddress!),
+                                                   imagp: UnsafeMutablePointer(mutating: imagPtr.baseAddress!))
+                vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(fftSize / 2))
+            }
+        }
+        
+        // Calculate geometric mean and arithmetic mean of power spectrum
+        // Spectral flatness = geometric_mean / arithmetic_mean
+        let epsilon: Float = 1e-10 // Avoid log(0)
+        var logSum: Float = 0.0
+        var linearSum: Float = 0.0
+        var validBins = 0
+        
+        for i in 1..<(fftSize / 2) { // Skip DC
+            let power = magnitudes[i] + epsilon
+            logSum += log(power)
+            linearSum += power
+            validBins += 1
+        }
+        
+        guard validBins > 0 else { return 0.5 }
+        
+        let geometricMean = exp(logSum / Float(validBins))
+        let arithmeticMean = linearSum / Float(validBins)
+        
+        guard arithmeticMean > epsilon else { return 0.5 }
+        
+        let flatness = Double(geometricMean / arithmeticMean)
+        return min(1.0, max(0.0, flatness))
+    }
+    
+    /// Calculates Harmonic-to-Noise Ratio using autocorrelation
+    /// Range: typically 0-30 dB for speech/music
+    /// Higher values indicate cleaner audio with less noise/artifacts
+    private func calculateHarmonicToNoiseRatio(audioData: [Float]) -> Double {
+        guard audioData.count > 4096 else { return 0.0 }
+        
+        // Use a segment from the middle
+        let segmentSize = min(8192, audioData.count)
+        let startIdx = (audioData.count - segmentSize) / 2
+        let segment = Array(audioData[startIdx..<(startIdx + segmentSize)])
+        
+        // Calculate autocorrelation
+        let correlationSize = segmentSize / 2
+        var autocorrelation = [Float](repeating: 0, count: correlationSize)
+        
+        // Normalize by energy at lag 0
+        var energy: Float = 0.0
+        vDSP_svesq(segment, 1, &energy, vDSP_Length(segmentSize))
+        
+        guard energy > 0 else { return 0.0 }
+        
+        // Calculate normalized autocorrelation for lags corresponding to 50-500 Hz (musical range)
+        let minLag = Int(sampleRate / 500.0) // 500 Hz fundamental
+        let maxLag = Int(sampleRate / 50.0)  // 50 Hz fundamental
+        
+        var maxCorrelation: Float = 0.0
+        
+        for lag in minLag..<min(maxLag, correlationSize) {
+            var correlation: Float = 0.0
+            vDSP_dotpr(segment, 1, 
+                       Array(segment[lag..<segmentSize]), 1, 
+                       &correlation, 
+                       vDSP_Length(segmentSize - lag))
+            
+            let normalizedCorr = correlation / energy
+            if normalizedCorr > maxCorrelation {
+                maxCorrelation = normalizedCorr
+            }
+        }
+        
+        // Convert to HNR in dB
+        // HNR = 10 * log10(r / (1 - r)) where r is the peak autocorrelation
+        guard maxCorrelation > 0 && maxCorrelation < 1 else {
+            return maxCorrelation >= 1 ? 30.0 : 0.0
+        }
+        
+        let hnr = 10.0 * log10(Double(maxCorrelation) / (1.0 - Double(maxCorrelation)))
+        
+        // Clamp to reasonable range
+        return min(30.0, max(0.0, hnr))
+    }
+    
+    /// Calculates onset regularity (standard deviation of inter-onset intervals)
+    /// Lower values indicate more regular/rhythmic content
+    /// Returns normalized value: 0 = perfectly regular, 1 = highly irregular
+    private func calculateOnsetRegularity(audioData: [Float]) -> Double {
+        // Calculate onset envelope (reuse existing function)
+        let onsetEnvelope = calculateOnsetStrength(audioData: audioData)
+        guard onsetEnvelope.count > 10 else { return 1.0 }
+        
+        // Find peaks in onset envelope
+        var peaks: [Int] = []
+        let threshold = calculateAdaptiveThreshold(onsetEnvelope)
+        
+        for i in 1..<(onsetEnvelope.count - 1) {
+            if onsetEnvelope[i] > onsetEnvelope[i-1] &&
+               onsetEnvelope[i] > onsetEnvelope[i+1] &&
+               onsetEnvelope[i] > threshold {
+                peaks.append(i)
+            }
+        }
+        
+        guard peaks.count > 2 else { return 1.0 }
+        
+        // Calculate inter-onset intervals (IOIs)
+        var intervals: [Double] = []
+        for i in 1..<peaks.count {
+            let interval = Double(peaks[i] - peaks[i-1]) * Double(hopSize) / sampleRate
+            intervals.append(interval)
+        }
+        
+        guard intervals.count > 1 else { return 1.0 }
+        
+        // Calculate mean and standard deviation of IOIs
+        let mean = intervals.reduce(0, +) / Double(intervals.count)
+        guard mean > 0 else { return 1.0 }
+        
+        let variance = intervals.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(intervals.count)
+        let stdDev = sqrt(variance)
+        
+        // Normalize by mean to get coefficient of variation
+        // CV = 0 means perfectly regular, CV = 1 means std dev equals mean
+        let coefficientOfVariation = stdDev / mean
+        
+        // Clamp to 0-1 range
+        return min(1.0, max(0.0, coefficientOfVariation))
+    }
+    
+    /// Calculates adaptive threshold for onset detection
+    private func calculateAdaptiveThreshold(_ envelope: [Float]) -> Float {
+        guard !envelope.isEmpty else { return 0.0 }
+        
+        // Use median + 1.5 * median absolute deviation
+        let sorted = envelope.sorted()
+        let median = sorted[sorted.count / 2]
+        
+        let absoluteDeviations = envelope.map { abs($0 - median) }
+        let sortedDeviations = absoluteDeviations.sorted()
+        let mad = sortedDeviations[sortedDeviations.count / 2]
+        
+        return median + 1.5 * mad
     }
     
     enum FeatureExtractorError: LocalizedError {
