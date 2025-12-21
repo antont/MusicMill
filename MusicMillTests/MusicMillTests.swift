@@ -551,12 +551,89 @@ struct MusicMillTests {
         #expect(capturedFrames > 0, "Should have captured audio")
         #expect(quality.energyMatch >= 0.2, "Energy should be somewhat preserved (got \(quality.energyMatch))")
         
-        // Log quality for tracking improvement over time
-        print("\nQuality scores logged for future comparison.")
-        print("As synthesis improves, tighten these thresholds:")
-        print("  Current overall: \(String(format: "%.2f", quality.overall))")
-        print("  Target overall:  0.50 (MVP)")
-        print("  Target overall:  0.70 (Good)")
-        print("  Target overall:  0.85 (Excellent)")
+        // Write quality report to file for visibility
+        // Use temp directory since test sandbox blocks Documents
+        let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent("musicmill_quality_report.txt")
+        var report = """
+        ============================================================
+        MUSICMILL QUALITY ANALYSIS REPORT
+        Generated: \(Date())
+        ============================================================
+        
+        SOURCE AUDIO
+        ------------
+        File: \(firstSegment.lastPathComponent)
+        Tempo: \(source.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")
+        Key: \(source.key ?? "nil")
+        Energy: \(String(format: "%.4f", source.energy))
+        Spectral Centroid: \(String(format: "%.1f Hz", source.spectralCentroid))
+        Zero Crossing Rate: \(String(format: "%.4f", source.zeroCrossingRate))
+        RMS Energy: \(String(format: "%.4f", source.rmsEnergy))
+        Duration: \(String(format: "%.2f sec", source.duration))
+        
+        OUTPUT AUDIO (Granular Synthesis)
+        ---------------------------------
+        Captured Frames: \(capturedFrames) (\(String(format: "%.2f sec", Double(capturedFrames) / 44100.0)))
+        Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")
+        Key: \(outputFeatures.key ?? "nil")
+        Energy: \(String(format: "%.4f", outputFeatures.energy))
+        Spectral Centroid: \(String(format: "%.1f Hz", outputFeatures.spectralCentroid))
+        Zero Crossing Rate: \(String(format: "%.4f", outputFeatures.zeroCrossingRate))
+        RMS Energy: \(String(format: "%.4f", outputFeatures.rmsEnergy))
+        Duration: \(String(format: "%.2f sec", outputFeatures.duration))
+        
+        QUALITY SCORES
+        --------------
+        Overall Quality: \(String(format: "%.1f%%", quality.overall * 100))
+        
+        """
+        
+        if let tempo = quality.tempoMatch {
+            report += "  Tempo Match:    \(String(format: "%5.1f%%", tempo * 100))\n"
+        } else {
+            report += "  Tempo Match:    N/A (tempo not detected)\n"
+        }
+        
+        if let key = quality.keyMatch {
+            report += "  Key Match:      \(String(format: "%5.1f%%", key * 100))\n"
+        } else {
+            report += "  Key Match:      N/A (key not detected)\n"
+        }
+        
+        report += """
+          Energy Match:   \(String(format: "%5.1f%%", quality.energyMatch * 100))
+          Spectral Match: \(String(format: "%5.1f%%", quality.spectralMatch * 100))
+          Texture Match:  \(String(format: "%5.1f%%", quality.textureMatch * 100))
+        
+        QUALITY TARGETS
+        ---------------
+        Current:   \(String(format: "%.0f%%", quality.overall * 100))
+        MVP:       50%
+        Good:      70%
+        Excellent: 85%
+        
+        INTERPRETATION
+        --------------
+        """
+        
+        if quality.overall >= 0.85 {
+            report += "Excellent! Output closely matches source characteristics.\n"
+        } else if quality.overall >= 0.70 {
+            report += "Good quality. Most characteristics are preserved.\n"
+        } else if quality.overall >= 0.50 {
+            report += "Acceptable. Some characteristics preserved, noticeable artifacts.\n"
+        } else if quality.overall >= 0.30 {
+            report += "Low quality. Significant artifacts, source barely recognizable.\n"
+        } else {
+            report += "Very low quality. Heavy artifacts, sounds nothing like source.\n"
+        }
+        
+        report += """
+        
+        ============================================================
+        """
+        
+        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
+        print("Quality report written to: \(reportURL.path)")
     }
 }
