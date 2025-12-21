@@ -8,7 +8,7 @@ class GenerationController: ObservableObject {
     @Published var tempo: Double? = nil
     @Published var key: String? = nil
     @Published var energy: Double = 0.5
-    @Published var mode: SynthesisEngine.GenerationMode = .granular
+    @Published var backend: SynthesisEngine.SynthesisBackend = .concatenative
     @Published var isLoading: Bool = false
     @Published var loadingStatus: String = ""
     @Published var samplesLoaded: Int = 0
@@ -36,33 +36,33 @@ class GenerationController: ObservableObject {
         }
         .store(in: &cancellables)
         
-        $mode
-            .sink { [weak self] mode in
-                self?.updateSynthesisMode(mode)
+        $backend
+            .sink { [weak self] backend in
+                self?.updateSynthesisBackend(backend)
             }
             .store(in: &cancellables)
     }
     
     /// Updates synthesis parameters
     private func updateSynthesisParameters(style: String?, tempo: Double?, key: String?, energy: Double) {
-        var params = SynthesisEngine.SynthesisParameters()
+        var params = SynthesisEngine.Parameters()
         params.style = style
         params.tempo = tempo
         params.key = key
         params.energy = energy
-        params.mode = mode
+        params.backend = backend
         
         synthesisEngine.setParameters(params)
     }
     
-    /// Updates synthesis mode
-    private func updateSynthesisMode(_ mode: SynthesisEngine.GenerationMode) {
-        var params = SynthesisEngine.SynthesisParameters()
+    /// Updates synthesis backend
+    private func updateSynthesisBackend(_ backend: SynthesisEngine.SynthesisBackend) {
+        var params = SynthesisEngine.Parameters()
         params.style = style
         params.tempo = tempo
         params.key = key
         params.energy = energy
-        params.mode = mode
+        params.backend = backend
         
         synthesisEngine.setParameters(params)
     }
@@ -80,43 +80,19 @@ class GenerationController: ObservableObject {
     /// Smoothly transitions to new style
     func transitionToStyle(_ newStyle: String?, duration: TimeInterval = 2.0) {
         style = newStyle
-        
-        var params = SynthesisEngine.SynthesisParameters()
-        params.style = newStyle
-        params.tempo = tempo
-        params.key = key
-        params.energy = energy
-        params.mode = mode
-        
-        synthesisEngine.transitionToParameters(params, duration: duration)
+        updateSynthesisParameters(style: newStyle, tempo: tempo, key: key, energy: energy)
     }
     
     /// Smoothly transitions to new tempo
     func transitionToTempo(_ newTempo: Double?, duration: TimeInterval = 2.0) {
         tempo = newTempo
-        
-        var params = SynthesisEngine.SynthesisParameters()
-        params.style = style
-        params.tempo = newTempo
-        params.key = key
-        params.energy = energy
-        params.mode = mode
-        
-        synthesisEngine.transitionToParameters(params, duration: duration)
+        updateSynthesisParameters(style: style, tempo: newTempo, key: key, energy: energy)
     }
     
     /// Smoothly transitions to new energy
     func transitionToEnergy(_ newEnergy: Double, duration: TimeInterval = 2.0) {
         energy = newEnergy
-        
-        var params = SynthesisEngine.SynthesisParameters()
-        params.style = style
-        params.tempo = tempo
-        params.key = key
-        params.energy = newEnergy
-        params.mode = mode
-        
-        synthesisEngine.transitionToParameters(params, duration: duration)
+        updateSynthesisParameters(style: style, tempo: tempo, key: key, energy: newEnergy)
     }
     
     // MARK: - Sample Loading

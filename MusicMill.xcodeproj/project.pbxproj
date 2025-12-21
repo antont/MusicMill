@@ -32,6 +32,7 @@
 		49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */; };
 		CONCAT002BUILD00000000001 /* ConcatenativeSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */; };
 		SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEGMT001MATCH00000000001 /* SegmentMatcher.swift */; };
+		RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */; };
 		A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */; };
 		E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */; };
 		D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */; };
@@ -88,6 +89,7 @@
 		B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleLibrary.swift; sourceTree = "<group>"; };
 		CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcatenativeSynthesizer.swift; sourceTree = "<group>"; };
 		SEGMT001MATCH00000000001 /* SegmentMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentMatcher.swift; sourceTree = "<group>"; };
+		RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVESynthesizer.swift; sourceTree = "<group>"; };
 		E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleGenerator.swift; sourceTree = "<group>"; };
 		59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralGenerator.swift; sourceTree = "<group>"; };
 		C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisEngine.swift; sourceTree = "<group>"; };
@@ -244,6 +246,7 @@
 				C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */,
 				CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */,
 				SEGMT001MATCH00000000001 /* SegmentMatcher.swift */,
+				RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */,
 			);
 			path = Generation;
 			sourceTree = "<group>";
@@ -472,6 +475,7 @@
 				49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */,
 				CONCAT002BUILD00000000001 /* ConcatenativeSynthesizer.swift in Sources */,
 				SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */,
+				RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */,
 				A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */,
 				E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */,
 				D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */,

@@ -9,11 +9,8 @@ struct PerformanceView: View {
     
     // Generation components
     @StateObject private var generationController = {
-        let granularSynthesizer = GranularSynthesizer()
         let sampleLibrary = SampleLibrary()
-        let sampleGenerator = SampleGenerator(granularSynthesizer: granularSynthesizer, sampleLibrary: sampleLibrary)
-        let neuralGenerator = NeuralGenerator()
-        let synthesisEngine = SynthesisEngine(sampleGenerator: sampleGenerator, neuralGenerator: neuralGenerator)
+        let synthesisEngine = SynthesisEngine(sampleLibrary: sampleLibrary)
         return GenerationController(synthesisEngine: synthesisEngine, sampleLibrary: sampleLibrary)
     }()
     
@@ -81,14 +78,15 @@ struct PerformanceView: View {
                 
                 Divider()
                 
-                // Generation mode
+                // Synthesis Backend
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Generation Mode")
+                    Text("Synthesis Backend")
                         .font(.headline)
-                    Picker("Mode", selection: $generationController.mode) {
-                        Text("Granular").tag(SynthesisEngine.GenerationMode.granular)
-                        Text("Neural").tag(SynthesisEngine.GenerationMode.neural)
-                        Text("Hybrid").tag(SynthesisEngine.GenerationMode.hybrid)
+                    Picker("Backend", selection: $generationController.backend) {
+                        Text("Granular").tag(SynthesisEngine.SynthesisBackend.granular)
+                        Text("Concatenative").tag(SynthesisEngine.SynthesisBackend.concatenative)
+                        Text("RAVE").tag(SynthesisEngine.SynthesisBackend.rave)
+                        Text("Hybrid").tag(SynthesisEngine.SynthesisBackend.hybrid)
                     }
                     .pickerStyle(.segmented)
                 }
