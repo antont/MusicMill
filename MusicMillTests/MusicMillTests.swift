@@ -458,7 +458,7 @@ struct MusicMillTests {
         let outputURL = outputDir.appendingPathComponent("quality_test_output.wav")
         try? FileManager.default.removeItem(at: outputURL)
         
-        // Configure synthesis - optimized for quality (best: 81.4%)
+        // Configure synthesis - with rhythm alignment
         var params = GranularSynthesizer.GrainParameters()
         params.grainSize = 0.10 // 100ms grains
         params.grainDensity = 15.0
@@ -466,6 +466,8 @@ struct MusicMillTests {
         params.positionJitter = 0.05
         params.pitchJitter = 0.01
         params.envelopeType = .blackman
+        params.rhythmAlignment = 0.8 // Snap to detected onsets
+        params.tempoSync = true // Sync grain rate to source tempo
         synthesizer.parameters = params
 
         // Set up audio capture

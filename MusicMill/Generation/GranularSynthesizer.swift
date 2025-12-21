@@ -24,6 +24,18 @@ class GranularSynthesizer {
         var envelopeType: EnvelopeType = .blackman // Less spectral leakage
         var positionJitter: Float = 0.05 // Moderate jitter
         var pitchJitter: Float = 0.01 // Moderate pitch variation
+        
+        // Rhythm alignment parameters
+        var rhythmAlignment: Float = 0.8 // 0 = random, 1 = snap to onsets
+        var tempoSync: Bool = true // Sync grain rate to detected tempo
+    }
+    
+    /// Source buffer with analyzed onset positions for rhythmic alignment
+    struct SourceBufferInfo {
+        let identifier: String
+        let buffer: AVAudioPCMBuffer
+        let onsets: [Int] // Sample positions of detected onsets
+        let tempo: Double? // Detected tempo in BPM
     }
     
     /// Internal grain representation for scheduling
@@ -46,8 +58,8 @@ class GranularSynthesizer {
     private let format: AVAudioFormat
     private let sampleRate: Double = 44100.0
     
-    // Source buffers (loaded samples)
-    private var sourceBuffers: [(identifier: String, buffer: AVAudioPCMBuffer)] = []
+    // Source buffers (loaded samples with onset analysis)
+    private var sourceBuffers: [SourceBufferInfo] = []
     private var sourceBuffersLock = NSLock()
     
     // Active grains (rendered in audio thread)
@@ -191,11 +203,26 @@ class GranularSynthesizer {
         let params = _parameters
         parametersLock.unlock()
         
+        // Get effective grain density (optionally tempo-synced) - BEFORE sample loop
+        var effectiveGrainDensity = params.grainDensity
+        if params.tempoSync {
+            sourceBuffersLock.lock()
+            let tempoValue: Double? = !sourceBuffers.isEmpty ? 
+                sourceBuffers[currentSourceIndex % sourceBuffers.count].tempo : nil
+            sourceBuffersLock.unlock()
+            
+            if let tempo = tempoValue {
+                // Sync grain rate to tempo: 4 grains per beat (16th notes)
+                // Use at least 8 grains/sec for sufficient coverage
+                effectiveGrainDensity = max(8.0, tempo / 60.0 * 4.0)
+            }
+        }
+        
         // Process each sample
         for sample in 0..<Int(frameCount) {
             // Schedule new grains based on density
             samplesSinceLastGrain += 1
-            let samplesPerGrain = Int(sampleRate / params.grainDensity)
+            let samplesPerGrain = Int(sampleRate / effectiveGrainDensity)
             
             if samplesSinceLastGrain >= samplesPerGrain {
                 scheduleNewGrain(params: params)
@@ -230,7 +257,7 @@ class GranularSynthesizer {
         return noErr
     }
     
-    /// Schedules a new grain for playback
+    /// Schedules a new grain for playback with rhythm alignment
     private func scheduleNewGrain(params: GrainParameters) {
         sourceBuffersLock.lock()
         guard !sourceBuffers.isEmpty else {
@@ -240,19 +267,34 @@ class GranularSynthesizer {
         
         // Select source buffer
         let bufferIndex = currentSourceIndex % sourceBuffers.count
-        let sourceBuffer = sourceBuffers[bufferIndex].buffer
+        let sourceInfo = sourceBuffers[bufferIndex]
+        let sourceBuffer = sourceInfo.buffer
+        let onsets = sourceInfo.onsets
         sourceBuffersLock.unlock()
         
-        guard let channelData = sourceBuffer.floatChannelData else { return }
+        guard sourceBuffer.floatChannelData != nil else { return }
         let sourceLength = Int(sourceBuffer.frameLength)
         guard sourceLength > 0 else { return }
         
-        // Calculate grain parameters with jitter
+        // Calculate grain size
         let grainSamples = min(Int(params.grainSize * sampleRate), maxGrainSamples)
-        let positionJitter = (Float.random(in: -1...1) * params.positionJitter)
-        let position = max(0, min(1, currentPosition + positionJitter))
-        let sourcePosition = Int(position * Float(sourceLength - grainSamples))
         
+        // Calculate base position with jitter
+        let positionJitter = (Float.random(in: -1...1) * params.positionJitter)
+        let basePosition = max(0, min(1, currentPosition + positionJitter))
+        var sourcePosition = Int(basePosition * Float(sourceLength - grainSamples))
+        
+        // Apply rhythm alignment: blend between random and onset-aligned position
+        if params.rhythmAlignment > 0 && !onsets.isEmpty {
+            if let nearestOnset = findNearestOnset(to: sourcePosition, in: onsets) {
+                // Blend between random position and nearest onset
+                let alignedPosition = max(0, min(sourceLength - grainSamples, nearestOnset))
+                let blend = params.rhythmAlignment
+                sourcePosition = Int(Float(sourcePosition) * (1.0 - blend) + Float(alignedPosition) * blend)
+            }
+        }
+        
+        // Apply pitch jitter
         let pitchJitter = 1.0 + (Float.random(in: -1...1) * params.pitchJitter)
         let pitch = params.pitch * pitchJitter
         
@@ -382,15 +424,158 @@ class GranularSynthesizer {
         return (lpfLeftState, lpfRightState)
     }
     
+    // MARK: - Onset Detection for Rhythm Alignment
+    
+    /// Detects onset positions in audio buffer for rhythm alignment
+    private func detectOnsets(in buffer: AVAudioPCMBuffer) -> [Int] {
+        guard let channelData = buffer.floatChannelData else { return [] }
+        
+        let frameLength = Int(buffer.frameLength)
+        let channelCount = Int(buffer.format.channelCount)
+        guard frameLength > 0 else { return [] }
+        
+        // Convert to mono
+        var mono = [Float](repeating: 0, count: frameLength)
+        if channelCount >= 2 {
+            for i in 0..<frameLength {
+                mono[i] = (channelData[0][i] + channelData[1][i]) / 2.0
+            }
+        } else {
+            for i in 0..<frameLength {
+                mono[i] = channelData[0][i]
+            }
+        }
+        
+        // Calculate onset strength using spectral flux
+        let hopSize = 512
+        let windowSize = 2048
+        let frameCount = (frameLength - windowSize) / hopSize
+        guard frameCount > 0 else { return [] }
+        
+        var onsetStrength = [Float](repeating: 0, count: frameCount)
+        var previousEnergy: Float = 0.0
+        
+        for frame in 0..<frameCount {
+            let startIdx = frame * hopSize
+            
+            // Calculate frame energy
+            var energy: Float = 0.0
+            for i in 0..<windowSize {
+                if startIdx + i < frameLength {
+                    energy += mono[startIdx + i] * mono[startIdx + i]
+                }
+            }
+            energy = sqrt(energy / Float(windowSize))
+            
+            // Onset = positive energy difference (half-wave rectified)
+            let diff = energy - previousEnergy
+            onsetStrength[frame] = max(0, diff)
+            previousEnergy = energy
+        }
+        
+        // Find peaks in onset strength
+        var onsets: [Int] = []
+        let threshold = calculateAdaptiveThreshold(onsetStrength)
+        let minOnsetDistanceSamples = Int(0.05 * sampleRate) // Min 50ms between onsets in samples
+        
+        for i in 1..<(onsetStrength.count - 1) {
+            if onsetStrength[i] > onsetStrength[i-1] &&
+               onsetStrength[i] > onsetStrength[i+1] &&
+               onsetStrength[i] > threshold {
+                let samplePosition = i * hopSize
+                
+                // Check minimum distance from last onset (in samples)
+                if onsets.isEmpty || (samplePosition - onsets.last!) >= minOnsetDistanceSamples {
+                    onsets.append(samplePosition)
+                }
+            }
+        }
+        
+        return onsets
+    }
+    
+    /// Calculates adaptive threshold for onset detection
+    private func calculateAdaptiveThreshold(_ values: [Float]) -> Float {
+        guard !values.isEmpty else { return 0.0 }
+        
+        let sorted = values.sorted()
+        let median = sorted[sorted.count / 2]
+        let mad = values.map { abs($0 - median) }.sorted()[values.count / 2]
+        
+        return median + 1.5 * mad
+    }
+    
+    /// Estimates tempo from onset positions
+    private func estimateTempo(from onsets: [Int]) -> Double? {
+        guard onsets.count >= 3 else { return nil }
+        
+        // Calculate inter-onset intervals
+        var intervals: [Int] = []
+        for i in 1..<onsets.count {
+            intervals.append(onsets[i] - onsets[i-1])
+        }
+        
+        guard !intervals.isEmpty else { return nil }
+        
+        // Find most common interval (histogram approach)
+        let sortedIntervals = intervals.sorted()
+        let medianInterval = sortedIntervals[sortedIntervals.count / 2]
+        
+        // Convert to BPM
+        let secondsPerBeat = Double(medianInterval) / sampleRate
+        guard secondsPerBeat > 0 else { return nil }
+        
+        var bpm = 60.0 / secondsPerBeat
+        
+        // Adjust to reasonable range (60-180 BPM)
+        while bpm < 60 { bpm *= 2 }
+        while bpm > 180 { bpm /= 2 }
+        
+        return bpm
+    }
+    
+    /// Finds the nearest onset position to a given sample position
+    private func findNearestOnset(to position: Int, in onsets: [Int]) -> Int? {
+        guard !onsets.isEmpty else { return nil }
+        
+        var nearestOnset = onsets[0]
+        var nearestDistance = abs(position - onsets[0])
+        
+        for onset in onsets {
+            let distance = abs(position - onset)
+            if distance < nearestDistance {
+                nearestDistance = distance
+                nearestOnset = onset
+            }
+        }
+        
+        return nearestOnset
+    }
+    
     // MARK: - Public API
     
-    /// Loads a source audio buffer for granular synthesis
+    /// Loads a source audio buffer for granular synthesis with onset detection
     func loadSourceBuffer(_ buffer: AVAudioPCMBuffer, identifier: String) {
+        // Detect onsets for rhythm alignment
+        let onsets = detectOnsets(in: buffer)
+        let tempo = estimateTempo(from: onsets)
+        
+        let sourceInfo = SourceBufferInfo(
+            identifier: identifier,
+            buffer: buffer,
+            onsets: onsets,
+            tempo: tempo
+        )
+        
         sourceBuffersLock.lock()
         // Remove existing buffer with same identifier
         sourceBuffers.removeAll { $0.identifier == identifier }
-        sourceBuffers.append((identifier, buffer))
+        sourceBuffers.append(sourceInfo)
         sourceBuffersLock.unlock()
+        
+        #if DEBUG
+        print("[GranularSynth] Loaded '\(identifier)': \(onsets.count) onsets, tempo: \(tempo.map { String(format: "%.1f BPM", $0) } ?? "unknown")")
+        #endif
     }
     
     /// Loads audio from a URL
