@@ -33,6 +33,7 @@
 		CONCAT002BUILD00000000001 /* ConcatenativeSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */; };
 		SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEGMT001MATCH00000000001 /* SegmentMatcher.swift */; };
 		RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */; };
+		RAVEB002BUILD00000000001 /* RAVEBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEB001BRIDG00000000001 /* RAVEBridge.swift */; };
 		A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */; };
 		E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */; };
 		D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */; };
@@ -90,6 +91,7 @@
 		CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcatenativeSynthesizer.swift; sourceTree = "<group>"; };
 		SEGMT001MATCH00000000001 /* SegmentMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentMatcher.swift; sourceTree = "<group>"; };
 		RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVESynthesizer.swift; sourceTree = "<group>"; };
+		RAVEB001BRIDG00000000001 /* RAVEBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEBridge.swift; sourceTree = "<group>"; };
 		E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleGenerator.swift; sourceTree = "<group>"; };
 		59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralGenerator.swift; sourceTree = "<group>"; };
 		C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisEngine.swift; sourceTree = "<group>"; };
@@ -247,6 +249,7 @@
 				CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */,
 				SEGMT001MATCH00000000001 /* SegmentMatcher.swift */,
 				RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */,
+				RAVEB001BRIDG00000000001 /* RAVEBridge.swift */,
 			);
 			path = Generation;
 			sourceTree = "<group>";
@@ -476,6 +479,7 @@
 				CONCAT002BUILD00000000001 /* ConcatenativeSynthesizer.swift in Sources */,
 				SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */,
 				RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */,
+				RAVEB002BUILD00000000001 /* RAVEBridge.swift in Sources */,
 				A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */,
 				E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */,
 				D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */,

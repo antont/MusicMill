@@ -91,8 +91,8 @@ class SynthesisEngine {
             // Available if we have samples loaded
             return sampleLibrary?.getAvailableStyles().count ?? 0 > 0
         case .rave:
-            // Available if RAVE model is loaded
-            return raveSynthesizer?.isModelLoaded ?? false
+            // Available if RAVE server is running
+            return raveSynthesizer?.isServerRunning ?? false
         case .hybrid:
             // Available if both granular and neural are available
             return isBackendAvailable(.granular) && isBackendAvailable(.rave)
@@ -125,15 +125,15 @@ class SynthesisEngine {
             
         case .rave:
             let synth = getRaveSynthesizer()
-            var raveParams = RAVESynthesizer.Parameters()
-            raveParams.masterVolume = params.masterVolume
-            synth.setParameters(raveParams)
-            // Set target based on style/tempo/energy
-            synth.setTarget(
-                style: Float(params.style?.hash ?? 0) / Float(Int.max),
-                tempo: params.tempo != nil ? Float((params.tempo! - 60) / 120) : 0.5,
-                energy: Float(params.energy)
-            )
+            synth.setVolume(params.masterVolume)
+            // Set style and parameters
+            if let style = params.style {
+                synth.setStyle(style)
+            }
+            synth.setEnergy(Float(params.energy))
+            if let tempo = params.tempo {
+                synth.setTempoFactor(Float(tempo / 120.0))  // Normalize to 120 BPM base
+            }
             
         case .hybrid:
             // Configure both
@@ -143,9 +143,11 @@ class SynthesisEngine {
             granular.parameters = grainParams
             
             let rave = getRaveSynthesizer()
-            var raveParams = RAVESynthesizer.Parameters()
-            raveParams.masterVolume = params.masterVolume * 0.5
-            rave.setParameters(raveParams)
+            rave.setVolume(params.masterVolume * 0.5)
+            if let style = params.style {
+                rave.setStyle(style)
+            }
+            rave.setEnergy(Float(params.energy))
         }
     }
     
@@ -201,19 +203,25 @@ class SynthesisEngine {
         }
     }
     
-    /// Loads RAVE model
-    func loadRAVEModel(encoderURL: URL?, decoderURL: URL) throws {
+    /// Starts RAVE server
+    func startRAVEServer() async throws {
         let rave = getRaveSynthesizer()
-        if let encoderURL = encoderURL {
-            try rave.loadEncoder(from: encoderURL)
-        }
-        try rave.loadDecoder(from: decoderURL)
+        try await rave.startServer()
     }
     
-    /// Loads RAVE model from bundle
-    func loadRAVEModelFromBundle() throws {
-        let rave = getRaveSynthesizer()
-        try rave.loadModelsFromBundle()
+    /// Stops RAVE server
+    func stopRAVEServer() {
+        raveSynthesizer?.stopServer()
+    }
+    
+    /// Gets available RAVE styles
+    func getRAVEStyles() -> [String] {
+        return raveSynthesizer?.availableStyles ?? []
+    }
+    
+    /// Gets RAVE server status
+    func getRAVEStatus() -> RAVEBridge.Status {
+        return raveSynthesizer?.serverStatus ?? .idle
     }
     
     // MARK: - Playback Control

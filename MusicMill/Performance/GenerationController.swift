@@ -13,6 +13,8 @@ class GenerationController: ObservableObject {
     @Published var loadingStatus: String = ""
     @Published var samplesLoaded: Int = 0
     @Published var availableStyles: [String] = []
+    @Published var raveStatus: String = "Not started"
+    @Published var raveStyles: [String] = []
     
     private let synthesisEngine: SynthesisEngine
     private let sampleLibrary: SampleLibrary
@@ -93,6 +95,56 @@ class GenerationController: ObservableObject {
     func transitionToEnergy(_ newEnergy: Double, duration: TimeInterval = 2.0) {
         energy = newEnergy
         updateSynthesisParameters(style: style, tempo: tempo, key: key, energy: newEnergy)
+    }
+    
+    // MARK: - RAVE Server Management
+    
+    /// Starts the RAVE server for neural synthesis
+    func startRAVEServer() async {
+        await MainActor.run {
+            raveStatus = "Starting server..."
+        }
+        
+        do {
+            try await synthesisEngine.startRAVEServer()
+            
+            await MainActor.run {
+                raveStatus = "Server running"
+                raveStyles = synthesisEngine.getRAVEStyles()
+                
+                // Add RAVE styles to available styles
+                for style in raveStyles where !availableStyles.contains(style) {
+                    availableStyles.append(style)
+                }
+            }
+        } catch {
+            await MainActor.run {
+                raveStatus = "Error: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /// Stops the RAVE server
+    func stopRAVEServer() {
+        synthesisEngine.stopRAVEServer()
+        Task { @MainActor in
+            raveStatus = "Stopped"
+        }
+    }
+    
+    /// Gets the current RAVE server status
+    func updateRAVEStatus() {
+        let status = synthesisEngine.getRAVEStatus()
+        switch status {
+        case .idle:
+            raveStatus = "Not started"
+        case .starting:
+            raveStatus = "Starting..."
+        case .running:
+            raveStatus = "Running"
+        case .error(let msg):
+            raveStatus = "Error: \(msg)"
+        }
     }
     
     // MARK: - Sample Loading

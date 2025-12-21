@@ -1,75 +1,73 @@
 import Foundation
 import AVFoundation
-import CoreML
-import Accelerate
 
 /// RAVE (Realtime Audio Variational autoEncoder) synthesizer
-/// Uses neural network to generate continuous audio from latent space
+/// Uses Python bridge for neural audio generation via PyTorch MPS
 class RAVESynthesizer {
     
     // MARK: - Types
     
     struct Parameters {
-        var latentDimension: Int = 16 // RAVE latent space dimension
-        var chunkSize: Int = 2048 // Audio samples per inference
         var masterVolume: Float = 1.0
-        var latentInterpolation: Float = 0.1 // How fast to interpolate between latent vectors
+        var energy: Float = 0.5
+        var tempoFactor: Float = 1.0
+        var variation: Float = 0.5
+        var styleBlend: [String: Float]? = nil
+        var interpolationRate: Float = 0.1
     }
     
     enum RAVEError: LocalizedError {
-        case modelNotLoaded
-        case encoderNotLoaded
-        case decoderNotLoaded
-        case inferenceError(String)
-        case invalidInput
+        case bridgeNotStarted
+        case generationFailed(String)
+        case audioEngineError(String)
         
         var errorDescription: String? {
             switch self {
-            case .modelNotLoaded:
-                return "RAVE model not loaded"
-            case .encoderNotLoaded:
-                return "RAVE encoder not loaded"
-            case .decoderNotLoaded:
-                return "RAVE decoder not loaded"
-            case .inferenceError(let msg):
-                return "Inference error: \(msg)"
-            case .invalidInput:
-                return "Invalid input for RAVE model"
+            case .bridgeNotStarted:
+                return "RAVE server not started"
+            case .generationFailed(let msg):
+                return "Generation failed: \(msg)"
+            case .audioEngineError(let msg):
+                return "Audio engine error: \(msg)"
             }
         }
     }
     
     // MARK: - Properties
     
-    private var encoder: MLModel?
-    private var decoder: MLModel?
-    
+    private let bridge: RAVEBridge
     private let audioEngine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
-    private let sampleRate: Double = 44100.0
+    private let sampleRate: Double = 48000.0
     
     private var parameters = Parameters()
     private var isPlaying = false
+    private let parametersLock = NSLock()
     
-    // Latent space navigation
-    private var currentLatent: [Float] = []
-    private var targetLatent: [Float] = []
+    // Buffer management
+    private var bufferFillTask: Task<Void, Never>?
+    private let minBufferedSamples = 48000  // 1 second minimum buffer
     
-    private let latentLock = NSLock()
-    
-    // Audio buffer for output
-    private var outputBuffer: [Float] = []
-    private var outputBufferPosition: Int = 0
-    private let outputLock = NSLock()
+    // Available styles (from server)
+    private(set) var availableStyles: [String] = []
     
     // MARK: - Initialization
     
-    init() {
-        // Initialize latent vectors
-        currentLatent = [Float](repeating: 0, count: parameters.latentDimension)
-        targetLatent = [Float](repeating: 0, count: parameters.latentDimension)
+    init(modelName: String = "percussion", anchorsPath: String? = nil) {
+        let defaultAnchors = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("MusicMill/RAVE/anchors.json").path
+        
+        bridge = RAVEBridge(
+            modelName: modelName,
+            anchorsPath: anchorsPath ?? (FileManager.default.fileExists(atPath: defaultAnchors) ? defaultAnchors : nil)
+        )
         
         setupAudioEngine()
+    }
+    
+    deinit {
+        stop()
+        bridge.stop()
     }
     
     private func setupAudioEngine() {
@@ -86,181 +84,192 @@ class RAVESynthesizer {
         audioEngine.connect(sourceNode, to: audioEngine.mainMixerNode, format: format)
     }
     
-    // MARK: - Model Loading
+    // MARK: - Server Management
     
-    /// Loads RAVE encoder model from bundle or URL
-    func loadEncoder(from url: URL) throws {
-        let config = MLModelConfiguration()
-        config.computeUnits = .cpuAndNeuralEngine // Use Neural Engine for speed
-        
-        encoder = try MLModel(contentsOf: url, configuration: config)
-        print("RAVE encoder loaded from: \(url.lastPathComponent)")
+    /// Starts the RAVE server
+    func startServer() async throws {
+        try await bridge.start()
+        availableStyles = bridge.getStyles()
+        print("RAVESynthesizer: Server started, styles: \(availableStyles)")
     }
     
-    /// Loads RAVE decoder model from bundle or URL
-    func loadDecoder(from url: URL) throws {
-        let config = MLModelConfiguration()
-        config.computeUnits = .cpuAndNeuralEngine
-        
-        decoder = try MLModel(contentsOf: url, configuration: config)
-        print("RAVE decoder loaded from: \(url.lastPathComponent)")
+    /// Stops the RAVE server
+    func stopServer() {
+        stop()
+        bridge.stop()
     }
     
-    /// Loads models from app bundle
-    func loadModelsFromBundle() throws {
-        // Look for models in the bundle
-        guard let encoderURL = Bundle.main.url(forResource: "RAVESynthesizerEncoder", withExtension: "mlmodelc"),
-              let decoderURL = Bundle.main.url(forResource: "RAVESynthesizerDecoder", withExtension: "mlmodelc") else {
-            // Try mlpackage format
-            if let encoderURL = Bundle.main.url(forResource: "RAVESynthesizerEncoder", withExtension: "mlpackage"),
-               let decoderURL = Bundle.main.url(forResource: "RAVESynthesizerDecoder", withExtension: "mlpackage") {
-                try loadEncoder(from: encoderURL)
-                try loadDecoder(from: decoderURL)
-                return
-            }
-            throw RAVEError.modelNotLoaded
+    /// Server status
+    var serverStatus: RAVEBridge.Status {
+        return bridge.status
+    }
+    
+    /// Whether server is running
+    var isServerRunning: Bool {
+        if case .running = bridge.status {
+            return true
         }
-        
-        try loadEncoder(from: encoderURL)
-        try loadDecoder(from: decoderURL)
-    }
-    
-    /// Check if models are loaded
-    var isModelLoaded: Bool {
-        return decoder != nil
-    }
-    
-    // MARK: - Latent Space Control
-    
-    /// Sets the target latent vector directly
-    func setTargetLatent(_ latent: [Float]) {
-        latentLock.lock()
-        targetLatent = latent
-        // Pad or truncate to match dimension
-        if targetLatent.count < parameters.latentDimension {
-            targetLatent.append(contentsOf: [Float](repeating: 0, count: parameters.latentDimension - targetLatent.count))
-        } else if targetLatent.count > parameters.latentDimension {
-            targetLatent = Array(targetLatent.prefix(parameters.latentDimension))
-        }
-        latentLock.unlock()
-    }
-    
-    /// Sets target latent based on style/tempo/energy (normalized 0-1)
-    func setTarget(style: Float, tempo: Float, energy: Float) {
-        // Map parameters to latent dimensions
-        // This is a simple mapping - could be learned from data
-        var latent = [Float](repeating: 0, count: parameters.latentDimension)
-        
-        // Use first few dimensions for main parameters
-        if parameters.latentDimension >= 3 {
-            latent[0] = (style - 0.5) * 4.0 // Map 0-1 to -2..2
-            latent[1] = (tempo - 0.5) * 4.0
-            latent[2] = (energy - 0.5) * 4.0
-        }
-        
-        // Add some variation to other dimensions
-        for i in 3..<parameters.latentDimension {
-            latent[i] = Float.random(in: -0.5...0.5)
-        }
-        
-        setTargetLatent(latent)
-    }
-    
-    /// Randomizes the target latent
-    func randomizeTarget() {
-        var latent = [Float](repeating: 0, count: parameters.latentDimension)
-        for i in 0..<parameters.latentDimension {
-            latent[i] = Float.random(in: -2...2)
-        }
-        setTargetLatent(latent)
+        return false
     }
     
     // MARK: - Playback Control
     
-    /// Starts audio generation
+    /// Starts audio generation and playback
     func start() throws {
-        guard decoder != nil else {
-            throw RAVEError.decoderNotLoaded
+        guard isServerRunning else {
+            throw RAVEError.bridgeNotStarted
         }
         
         if !audioEngine.isRunning {
             try audioEngine.start()
         }
+        
         isPlaying = true
         
-        // Prime the output buffer
-        generateNextChunk()
+        // Start buffer fill loop
+        startBufferFillLoop()
     }
     
-    /// Stops audio generation
+    /// Stops audio generation and playback
     func stop() {
         isPlaying = false
-        audioEngine.stop()
-    }
-    
-    /// Updates parameters
-    func setParameters(_ params: Parameters) {
-        parameters = params
+        bufferFillTask?.cancel()
+        bufferFillTask = nil
         
-        // Resize latent vectors if dimension changed
-        latentLock.lock()
-        if currentLatent.count != params.latentDimension {
-            currentLatent = [Float](repeating: 0, count: params.latentDimension)
-            targetLatent = [Float](repeating: 0, count: params.latentDimension)
+        if audioEngine.isRunning {
+            audioEngine.stop()
         }
-        latentLock.unlock()
-    }
-    
-    /// Gets audio engine for external connections
-    func getAudioEngine() -> AVAudioEngine {
-        return audioEngine
-    }
-    
-    // MARK: - Audio Generation
-    
-    private func generateNextChunk() {
-        guard let decoder = decoder else { return }
         
-        // Interpolate current latent toward target
-        latentLock.lock()
-        for i in 0..<currentLatent.count {
-            currentLatent[i] += (targetLatent[i] - currentLatent[i]) * parameters.latentInterpolation
+        bridge.clearBuffer()
+    }
+    
+    /// Pauses playback without stopping server
+    func pause() {
+        isPlaying = false
+        bufferFillTask?.cancel()
+        bufferFillTask = nil
+    }
+    
+    /// Resumes playback
+    func resume() throws {
+        guard isServerRunning else {
+            throw RAVEError.bridgeNotStarted
         }
-        let latent = currentLatent
-        latentLock.unlock()
         
-        // Create input for decoder
-        do {
-            // Prepare latent input array
-            // Shape: [1, latentDim, 1] for single chunk
-            let latentArray = try MLMultiArray(shape: [1, NSNumber(value: parameters.latentDimension), 1], dataType: .float32)
-            for i in 0..<parameters.latentDimension {
-                latentArray[i] = NSNumber(value: latent[i])
-            }
+        isPlaying = true
+        
+        if !audioEngine.isRunning {
+            try audioEngine.start()
+        }
+        
+        startBufferFillLoop()
+    }
+    
+    // MARK: - Parameter Control
+    
+    /// Sets style by name (single style, full weight)
+    func setStyle(_ style: String) {
+        parametersLock.lock()
+        parameters.styleBlend = [style: 1.0]
+        parametersLock.unlock()
+    }
+    
+    /// Sets style blend (multiple styles with weights)
+    func setStyleBlend(_ blend: [String: Float]) {
+        parametersLock.lock()
+        parameters.styleBlend = blend
+        parametersLock.unlock()
+    }
+    
+    /// Sets energy level (0-1)
+    func setEnergy(_ energy: Float) {
+        parametersLock.lock()
+        parameters.energy = max(0, min(1, energy))
+        parametersLock.unlock()
+    }
+    
+    /// Sets tempo factor (0.5-2.0)
+    func setTempoFactor(_ tempo: Float) {
+        parametersLock.lock()
+        parameters.tempoFactor = max(0.5, min(2.0, tempo))
+        parametersLock.unlock()
+    }
+    
+    /// Sets variation amount (0-1)
+    func setVariation(_ variation: Float) {
+        parametersLock.lock()
+        parameters.variation = max(0, min(1, variation))
+        parametersLock.unlock()
+    }
+    
+    /// Sets master volume (0-1)
+    func setVolume(_ volume: Float) {
+        parametersLock.lock()
+        parameters.masterVolume = max(0, min(1, volume))
+        parametersLock.unlock()
+    }
+    
+    /// Sets all parameters from Performance controls
+    func setParameters(style: String?, tempo: Double, energy: Double) {
+        parametersLock.lock()
+        
+        if let style = style {
+            parameters.styleBlend = [style: 1.0]
+        }
+        
+        // Map tempo BPM to tempo factor (assuming base tempo of 120 BPM)
+        parameters.tempoFactor = Float(tempo / 120.0)
+        parameters.energy = Float(energy)
+        
+        parametersLock.unlock()
+    }
+    
+    /// Gets current parameters
+    func getParameters() -> Parameters {
+        parametersLock.lock()
+        defer { parametersLock.unlock() }
+        return parameters
+    }
+    
+    // MARK: - Buffer Management
+    
+    private func startBufferFillLoop() {
+        bufferFillTask?.cancel()
+        
+        bufferFillTask = Task { [weak self] in
+            guard let self = self else { return }
             
-            // Create feature provider
-            let input = try MLDictionaryFeatureProvider(dictionary: ["latent": latentArray])
-            
-            // Run inference
-            let output = try decoder.prediction(from: input)
-            
-            // Extract audio from output
-            if let audioOutput = output.featureValue(for: "audio")?.multiArrayValue {
-                var newAudio = [Float](repeating: 0, count: parameters.chunkSize)
-                
-                for i in 0..<min(audioOutput.count, parameters.chunkSize) {
-                    newAudio[i] = audioOutput[i].floatValue * parameters.masterVolume
+            while !Task.isCancelled && self.isPlaying {
+                // Check if buffer needs filling
+                if self.bridge.bufferedSamples < self.minBufferedSamples {
+                    do {
+                        let controls = self.getCurrentControls()
+                        try await self.bridge.fillBuffer(controls: controls)
+                    } catch {
+                        print("RAVESynthesizer: Buffer fill error: \(error)")
+                    }
                 }
                 
-                // Append to output buffer
-                outputLock.lock()
-                outputBuffer.append(contentsOf: newAudio)
-                outputLock.unlock()
+                // Small delay to prevent tight loop
+                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
             }
-        } catch {
-            print("RAVE inference error: \(error)")
         }
     }
+    
+    private func getCurrentControls() -> RAVEBridge.Controls {
+        parametersLock.lock()
+        let params = parameters
+        parametersLock.unlock()
+        
+        return RAVEBridge.Controls(
+            styleBlend: params.styleBlend,
+            energy: params.energy,
+            tempoFactor: params.tempoFactor,
+            variation: params.variation
+        )
+    }
+    
+    // MARK: - Audio Rendering
     
     private func renderAudio(frameCount: UInt32, audioBufferList: UnsafeMutablePointer<AudioBufferList>) -> OSStatus {
         let ablPointer = UnsafeMutableAudioBufferListPointer(audioBufferList)
@@ -278,120 +287,71 @@ class RAVESynthesizer {
             return noErr
         }
         
-        outputLock.lock()
+        // Get volume
+        parametersLock.lock()
+        let volume = parameters.masterVolume
+        parametersLock.unlock()
+        
+        // Read from bridge buffer
+        let samples = bridge.readSamples(count: Int(frameCount))
         
         for i in 0..<Int(frameCount) {
-            // Check if we need more audio
-            if outputBufferPosition >= outputBuffer.count - parameters.chunkSize {
-                outputLock.unlock()
-                generateNextChunk()
-                outputLock.lock()
-            }
-            
-            // Get sample
-            let sample: Float
-            if outputBufferPosition < outputBuffer.count {
-                sample = outputBuffer[outputBufferPosition]
-                outputBufferPosition += 1
-            } else {
-                sample = 0
-            }
-            
+            let sample = samples[i] * volume
             leftOut?[i] = sample
             rightOut?[i] = sample
-            
-            // Trim buffer periodically to prevent memory growth
-            if outputBufferPosition > 88200 { // ~2 seconds
-                outputBuffer.removeFirst(44100)
-                outputBufferPosition -= 44100
-            }
         }
-        
-        outputLock.unlock()
         
         return noErr
     }
     
-    // MARK: - Encoding (for analysis/style transfer)
+    // MARK: - Utility
     
-    /// Encodes audio to latent space (requires encoder model)
-    func encode(audio: [Float]) throws -> [Float] {
-        guard let encoder = encoder else {
-            throw RAVEError.encoderNotLoaded
-        }
-        
-        // Prepare input
-        let audioArray = try MLMultiArray(shape: [1, 1, NSNumber(value: audio.count)], dataType: .float32)
-        for i in 0..<audio.count {
-            audioArray[i] = NSNumber(value: audio[i])
-        }
-        
-        let input = try MLDictionaryFeatureProvider(dictionary: ["audio": audioArray])
-        let output = try encoder.prediction(from: input)
-        
-        guard let latentOutput = output.featureValue(for: "latent")?.multiArrayValue else {
-            throw RAVEError.inferenceError("No latent output")
-        }
-        
-        var latent = [Float](repeating: 0, count: latentOutput.count)
-        for i in 0..<latentOutput.count {
-            latent[i] = latentOutput[i].floatValue
-        }
-        
-        return latent
+    /// Gets audio engine for external connections
+    func getAudioEngine() -> AVAudioEngine {
+        return audioEngine
     }
     
-    /// Encodes audio file and returns average latent vector
-    func encodeFile(url: URL) async throws -> [Float] {
-        let file = try AVAudioFile(forReading: url)
-        let format = file.processingFormat
-        let frameCount = AVAudioFrameCount(file.length)
+    /// Generates audio to a buffer (for testing/export)
+    func generateToBuffer(duration: TimeInterval, controls: RAVEBridge.Controls? = nil) async throws -> AVAudioPCMBuffer {
+        guard isServerRunning else {
+            throw RAVEError.bridgeNotStarted
+        }
+        
+        let frameCount = AVAudioFrameCount(duration * sampleRate)
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            throw RAVEError.invalidInput
+            throw RAVEError.audioEngineError("Failed to create buffer")
         }
         
-        try file.read(into: buffer)
+        let effectiveControls = controls ?? getCurrentControls()
         
+        // Calculate frames needed (RAVE generates ~2048 samples per frame)
+        let samplesPerFrame = 2048
+        let framesNeeded = Int(ceil(Double(frameCount) / Double(samplesPerFrame)))
+        
+        // Generate audio
+        var allSamples: [Float] = []
+        let chunkSize = 50  // Generate in chunks
+        
+        for start in stride(from: 0, to: framesNeeded, by: chunkSize) {
+            let frames = min(chunkSize, framesNeeded - start)
+            let audio = try await bridge.generate(controls: effectiveControls, frames: frames)
+            allSamples.append(contentsOf: audio)
+        }
+        
+        // Copy to buffer
+        buffer.frameLength = frameCount
         guard let channelData = buffer.floatChannelData else {
-            throw RAVEError.invalidInput
+            throw RAVEError.audioEngineError("Failed to get channel data")
         }
         
-        // Convert to mono
-        var monoData = [Float](repeating: 0, count: Int(buffer.frameLength))
-        let channelCount = Int(format.channelCount)
-        
-        for i in 0..<Int(buffer.frameLength) {
-            var sum: Float = 0
-            for ch in 0..<channelCount {
-                sum += channelData[ch][i]
-            }
-            monoData[i] = sum / Float(channelCount)
+        let volume = getParameters().masterVolume
+        for i in 0..<Int(frameCount) {
+            let sample = i < allSamples.count ? allSamples[i] * volume : 0
+            channelData[0][i] = sample
         }
         
-        // Encode in chunks and average
-        var latentSum = [Float](repeating: 0, count: parameters.latentDimension)
-        var chunkCount = 0
-        
-        let chunkSize = parameters.chunkSize
-        for start in stride(from: 0, to: monoData.count - chunkSize, by: chunkSize) {
-            let chunk = Array(monoData[start..<(start + chunkSize)])
-            let latent = try encode(audio: chunk)
-            
-            for i in 0..<min(latent.count, parameters.latentDimension) {
-                latentSum[i] += latent[i]
-            }
-            chunkCount += 1
-        }
-        
-        // Average
-        if chunkCount > 0 {
-            for i in 0..<parameters.latentDimension {
-                latentSum[i] /= Float(chunkCount)
-            }
-        }
-        
-        return latentSum
+        return buffer
     }
 }
-

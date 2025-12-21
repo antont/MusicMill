@@ -20,6 +20,20 @@ struct PerformanceView: View {
     @State private var isGenerating = false
     @State private var hasLoadedSamples = false
     
+    // Computed property for RAVE status indicator color
+    private var raveStatusColor: Color {
+        switch generationController.raveStatus {
+        case "Running":
+            return .green
+        case let status where status.hasPrefix("Starting"):
+            return .yellow
+        case let status where status.hasPrefix("Error"):
+            return .red
+        default:
+            return .gray
+        }
+    }
+    
     var body: some View {
         HStack(spacing: 0) {
             // Left sidebar - Controls
@@ -89,6 +103,45 @@ struct PerformanceView: View {
                         Text("Hybrid").tag(SynthesisEngine.SynthesisBackend.hybrid)
                     }
                     .pickerStyle(.segmented)
+                    
+                    // RAVE Status (when RAVE is selected)
+                    if generationController.backend == .rave || generationController.backend == .hybrid {
+                        HStack {
+                            Circle()
+                                .fill(raveStatusColor)
+                                .frame(width: 8, height: 8)
+                            Text(generationController.raveStatus)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                Task {
+                                    await generationController.startRAVEServer()
+                                }
+                            }) {
+                                Text("Start Server")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(generationController.raveStatus == "Running" || generationController.raveStatus.hasPrefix("Starting"))
+                        }
+                        
+                        // RAVE Style selector
+                        if !generationController.raveStyles.isEmpty {
+                            Picker("RAVE Style", selection: Binding(
+                                get: { styleController.selectedStyle },
+                                set: { styleController.selectedStyle = $0 }
+                            )) {
+                                Text("Random").tag(nil as String?)
+                                ForEach(generationController.raveStyles, id: \.self) { style in
+                                    Text(style).tag(style as String?)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+                    }
                 }
                 
                 Divider()
