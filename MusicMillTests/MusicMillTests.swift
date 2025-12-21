@@ -387,4 +387,176 @@ struct MusicMillTests {
         let fileSize = try FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int ?? 0
         #expect(fileSize > 100, "Output file should have data")
     }
+    
+    // MARK: - Quality Analysis Tests
+    
+    @Test @MainActor func testGranularSynthesisQuality() async throws {
+        print(String(repeating: "=", count: 60))
+        print("TESTING GRANULAR SYNTHESIS QUALITY")
+        print(String(repeating: "=", count: 60))
+        
+        // Find analysis segments
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
+        
+        guard FileManager.default.fileExists(atPath: analysisDir.path) else {
+            throw TestError.directoryNotFound("No analysis directory")
+        }
+        
+        // Find segment files
+        var segmentURLs: [URL] = []
+        let contents = try FileManager.default.contentsOfDirectory(at: analysisDir, includingPropertiesForKeys: nil)
+        for dir in contents where dir.hasDirectoryPath {
+            let segmentsDir = dir.appendingPathComponent("Segments")
+            if FileManager.default.fileExists(atPath: segmentsDir.path) {
+                let segments = try FileManager.default.contentsOfDirectory(at: segmentsDir, includingPropertiesForKeys: nil)
+                    .filter { $0.pathExtension == "m4a" }
+                segmentURLs.append(contentsOf: segments)
+            }
+        }
+        
+        guard !segmentURLs.isEmpty else {
+            throw TestError.directoryNotFound("No segments")
+        }
+        
+        print("[1] Found \(segmentURLs.count) segments")
+        
+        // Extract features from source segments
+        let featureExtractor = FeatureExtractor()
+        let qualityAnalyzer = QualityAnalyzer()
+        
+        print("\n[2] Extracting source features...")
+        var sourceFeatures: FeatureExtractor.AudioFeatures?
+        let firstSegment = segmentURLs.first!
+        do {
+            sourceFeatures = try await featureExtractor.extractFeatures(from: firstSegment)
+            print("  Source: \(firstSegment.lastPathComponent)")
+            print("    Tempo: \(sourceFeatures?.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")")
+            print("    Key: \(sourceFeatures?.key ?? "nil")")
+            print("    Energy: \(String(format: "%.3f", sourceFeatures?.energy ?? 0))")
+            print("    Spectral Centroid: \(String(format: "%.1f Hz", sourceFeatures?.spectralCentroid ?? 0))")
+            print("    Zero Crossing Rate: \(String(format: "%.3f", sourceFeatures?.zeroCrossingRate ?? 0))")
+        } catch {
+            print("  Failed to extract source features: \(error)")
+            throw error
+        }
+        
+        // Create synthesizer and load source
+        print("\n[3] Creating granular synthesizer...")
+        let synthesizer = GranularSynthesizer()
+        
+        for (index, url) in segmentURLs.prefix(3).enumerated() {
+            try? synthesizer.loadSource(from: url, identifier: "seg_\(index)")
+        }
+        print("  Loaded \(synthesizer.getSourceIdentifiers().count) sources")
+        
+        // Output file path
+        let outputDir = documentsURL.appendingPathComponent("MusicMill")
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let outputURL = outputDir.appendingPathComponent("quality_test_output.wav")
+        try? FileManager.default.removeItem(at: outputURL)
+        
+        // Configure synthesis
+        var params = GranularSynthesizer.GrainParameters()
+        params.grainSize = 0.05
+        params.grainDensity = 25.0
+        params.amplitude = 0.8
+        params.positionJitter = 0.2
+        synthesizer.parameters = params
+        
+        // Set up audio capture
+        let engine = synthesizer.getAudioEngine()
+        let mainMixer = engine.mainMixerNode
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 44100.0,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        
+        let outputFile = try AVAudioFile(forWriting: outputURL, settings: outputSettings)
+        var capturedFrames: AVAudioFrameCount = 0
+        
+        // Capture buffer for analysis
+        let analysisBufferCapacity = AVAudioFrameCount(44100 * 5) // 5 seconds
+        let analysisBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: analysisBufferCapacity)!
+        
+        mainMixer.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+            try? outputFile.write(from: buffer)
+            
+            // Copy to analysis buffer
+            if capturedFrames + buffer.frameLength <= analysisBufferCapacity {
+                let dstOffset = Int(capturedFrames)
+                for ch in 0..<Int(format.channelCount) {
+                    if let src = buffer.floatChannelData?[ch],
+                       let dst = analysisBuffer.floatChannelData?[ch] {
+                        for i in 0..<Int(buffer.frameLength) {
+                            dst[dstOffset + i] = src[i]
+                        }
+                    }
+                }
+            }
+            capturedFrames += buffer.frameLength
+        }
+        
+        // Start synthesis
+        print("\n[4] Running synthesis for 3 seconds...")
+        try synthesizer.start()
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        synthesizer.stop()
+        mainMixer.removeTap(onBus: 0)
+        
+        analysisBuffer.frameLength = min(capturedFrames, analysisBufferCapacity)
+        print("  Captured \(capturedFrames) frames (\(String(format: "%.2f", Double(capturedFrames) / 44100.0)) seconds)")
+        
+        // Extract features from output
+        print("\n[5] Extracting output features...")
+        let outputFeatures = featureExtractor.extractFeatures(from: analysisBuffer)
+        print("    Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")")
+        print("    Key: \(outputFeatures.key ?? "nil")")
+        print("    Energy: \(String(format: "%.3f", outputFeatures.energy))")
+        print("    Spectral Centroid: \(String(format: "%.1f Hz", outputFeatures.spectralCentroid))")
+        print("    Zero Crossing Rate: \(String(format: "%.3f", outputFeatures.zeroCrossingRate))")
+        
+        // Compare quality
+        print("\n[6] Quality Analysis...")
+        guard let source = sourceFeatures else {
+            throw TestError.noAudioOutput
+        }
+        
+        let quality = qualityAnalyzer.compare(source: source, output: outputFeatures)
+        print(quality.description)
+        
+        // Summary
+        print("\n" + String(repeating: "=", count: 60))
+        print("QUALITY ANALYSIS RESULTS")
+        print(String(repeating: "=", count: 60))
+        print("Overall Quality: \(String(format: "%.1f%%", quality.overall * 100))")
+        if let tempo = quality.tempoMatch {
+            print("  Tempo Match: \(String(format: "%.1f%%", tempo * 100))")
+        }
+        if let key = quality.keyMatch {
+            print("  Key Match: \(String(format: "%.1f%%", key * 100))")
+        }
+        print("  Energy Match: \(String(format: "%.1f%%", quality.energyMatch * 100))")
+        print("  Spectral Match: \(String(format: "%.1f%%", quality.spectralMatch * 100))")
+        print("  Texture Match: \(String(format: "%.1f%%", quality.textureMatch * 100))")
+        print(String(repeating: "=", count: 60))
+        
+        // Thresholds - initially set low given granular artifacts
+        #expect(capturedFrames > 0, "Should have captured audio")
+        #expect(quality.energyMatch >= 0.2, "Energy should be somewhat preserved (got \(quality.energyMatch))")
+        
+        // Log quality for tracking improvement over time
+        print("\nQuality scores logged for future comparison.")
+        print("As synthesis improves, tighten these thresholds:")
+        print("  Current overall: \(String(format: "%.2f", quality.overall))")
+        print("  Target overall:  0.50 (MVP)")
+        print("  Target overall:  0.70 (Good)")
+        print("  Target overall:  0.85 (Excellent)")
+    }
 }

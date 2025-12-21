@@ -34,6 +34,7 @@
 		E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */; };
 		D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */; };
 		8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */; };
+		QA01234567890123456789AB /* QualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = QA12345678901234567890AB /* QualityAnalyzer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +79,7 @@
 		89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectralAnalyzer.swift; sourceTree = "<group>"; };
 		8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructureAnalyzer.swift; sourceTree = "<group>"; };
 		1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekordboxParser.swift; sourceTree = "<group>"; };
+		QA12345678901234567890AB /* QualityAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityAnalyzer.swift; sourceTree = "<group>"; };
 		717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerativeModelTrainer.swift; sourceTree = "<group>"; };
 		90CE387D266B165E2B7F55D7 /* GenerationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationController.swift; sourceTree = "<group>"; };
 		D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularSynthesizer.swift; sourceTree = "<group>"; };
@@ -136,6 +138,7 @@
 				89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */,
 				8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */,
 				1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */,
+				QA12345678901234567890AB /* QualityAnalyzer.swift */,
 );
 			path = Analysis;
 			sourceTree = "<group>";
@@ -457,6 +460,7 @@
 				84BEB3047D4EF3576A123C72 /* SpectralAnalyzer.swift in Sources */,
 				86AE3BD42F18D543459919C7 /* StructureAnalyzer.swift in Sources */,
 				F9301E75860C9295F17748A1 /* RekordboxParser.swift in Sources */,
+				QA01234567890123456789AB /* QualityAnalyzer.swift in Sources */,
 				3CD4BAD69E188054EE1D1281 /* GenerativeModelTrainer.swift in Sources */,
 				615522429CA5A1392DD0C831 /* GenerationController.swift in Sources */,
 				49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */,

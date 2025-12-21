@@ -57,6 +57,86 @@ class FeatureExtractor {
         )
     }
     
+    /// Extracts features from an in-memory audio buffer
+    func extractFeatures(from buffer: AVAudioPCMBuffer) -> AudioFeatures {
+        // Get audio data from buffer
+        guard let channelData = buffer.floatChannelData else {
+            return AudioFeatures(
+                tempo: nil,
+                key: nil,
+                energy: 0,
+                spectralCentroid: 0,
+                zeroCrossingRate: 0,
+                rmsEnergy: 0,
+                duration: 0
+            )
+        }
+        
+        let frameLength = Int(buffer.frameLength)
+        let channelCount = Int(buffer.format.channelCount)
+        let bufferSampleRate = buffer.format.sampleRate
+        let durationSeconds = Double(frameLength) / bufferSampleRate
+        
+        // Convert to mono
+        var monoData = [Float](repeating: 0, count: frameLength)
+        if channelCount >= 2 {
+            // Average stereo channels
+            let left = channelData[0]
+            let right = channelData[1]
+            for i in 0..<frameLength {
+                monoData[i] = (left[i] + right[i]) / 2.0
+            }
+        } else {
+            // Copy mono channel
+            let mono = channelData[0]
+            for i in 0..<frameLength {
+                monoData[i] = mono[i]
+            }
+        }
+        
+        // Resample if needed (our analysis expects 44100 Hz)
+        var analysisData = monoData
+        if bufferSampleRate != sampleRate {
+            analysisData = resample(monoData, from: bufferSampleRate, to: sampleRate)
+        }
+        
+        // Extract features
+        let energy = calculateEnergy(audioData: analysisData)
+        let spectralCentroid = calculateSpectralCentroidFFT(audioData: analysisData)
+        let zeroCrossingRate = calculateZeroCrossingRate(audioData: analysisData)
+        let rmsEnergy = calculateRMSEnergy(audioData: analysisData)
+        let tempo = estimateTempoAutocorrelation(audioData: analysisData)
+        let key = estimateKeyChromagram(audioData: analysisData)
+        
+        return AudioFeatures(
+            tempo: tempo,
+            key: key,
+            energy: energy,
+            spectralCentroid: spectralCentroid,
+            zeroCrossingRate: zeroCrossingRate,
+            rmsEnergy: rmsEnergy,
+            duration: durationSeconds
+        )
+    }
+    
+    /// Simple linear resampling for different sample rates
+    private func resample(_ data: [Float], from sourceSampleRate: Double, to targetSampleRate: Double) -> [Float] {
+        let ratio = targetSampleRate / sourceSampleRate
+        let newLength = Int(Double(data.count) * ratio)
+        var resampled = [Float](repeating: 0, count: newLength)
+        
+        for i in 0..<newLength {
+            let sourceIndex = Double(i) / ratio
+            let lowerIndex = Int(sourceIndex)
+            let upperIndex = min(lowerIndex + 1, data.count - 1)
+            let fraction = Float(sourceIndex - Double(lowerIndex))
+            
+            resampled[i] = data[lowerIndex] * (1 - fraction) + data[upperIndex] * fraction
+        }
+        
+        return resampled
+    }
+    
     /// Converts stereo audio to mono by averaging channels
     private func convertToMono(_ audioData: [Float]) -> [Float] {
         // Assume interleaved stereo: L R L R L R...
