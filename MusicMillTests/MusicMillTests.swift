@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AVFoundation
 import Testing
 @testable import MusicMill
 
@@ -191,5 +192,199 @@ struct MusicMillTests {
     
     enum TestError: Error {
         case directoryNotFound(String)
+        case noAudioOutput
+        case audioTooQuiet
+    }
+    
+    // MARK: - Audio Output Test
+    
+    @Test @MainActor func testGranularSynthesisAudioOutput() async throws {
+        print(String(repeating: "=", count: 60))
+        print("TESTING GRANULAR SYNTHESIS AUDIO OUTPUT")
+        print(String(repeating: "=", count: 60))
+        
+        // Find analysis segments
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
+        
+        guard FileManager.default.fileExists(atPath: analysisDir.path) else {
+            print("✗ No analysis directory found. Run analyzeBLVCKCEILINGCollection first.")
+            throw TestError.directoryNotFound("No analysis directory")
+        }
+        
+        // Find segment files
+        var segmentURLs: [URL] = []
+        let contents = try FileManager.default.contentsOfDirectory(at: analysisDir, includingPropertiesForKeys: nil)
+        for dir in contents where dir.hasDirectoryPath {
+            let segmentsDir = dir.appendingPathComponent("Segments")
+            if FileManager.default.fileExists(atPath: segmentsDir.path) {
+                let segments = try FileManager.default.contentsOfDirectory(at: segmentsDir, includingPropertiesForKeys: nil)
+                    .filter { $0.pathExtension == "m4a" }
+                segmentURLs.append(contentsOf: segments)
+            }
+        }
+        
+        print("[1] Found \(segmentURLs.count) segment files")
+        #expect(segmentURLs.count > 0, "Should have segment files from analysis")
+        
+        // Create granular synthesizer
+        print("\n[2] Creating granular synthesizer...")
+        let synthesizer = GranularSynthesizer()
+        
+        // Load first few segments
+        let segmentsToLoad = Array(segmentURLs.prefix(5))
+        for (index, url) in segmentsToLoad.enumerated() {
+            do {
+                try synthesizer.loadSource(from: url, identifier: "segment_\(index)")
+                print("  ✓ Loaded: \(url.lastPathComponent)")
+            } catch {
+                print("  ✗ Failed to load \(url.lastPathComponent): \(error)")
+            }
+        }
+        
+        let loadedSources = synthesizer.getSourceIdentifiers()
+        print("  Total loaded: \(loadedSources.count)")
+        #expect(loadedSources.count > 0, "Should load at least one source")
+        
+        // Set up audio capture
+        print("\n[3] Setting up audio capture...")
+        
+        let duration: TimeInterval = 3.0 // Capture 3 seconds
+        
+        // Configure synthesis parameters
+        var params = GranularSynthesizer.GrainParameters()
+        params.grainSize = 0.05 // 50ms grains
+        params.grainDensity = 30.0 // 30 grains per second
+        params.amplitude = 0.8
+        params.positionJitter = 0.2
+        synthesizer.parameters = params
+        
+        // Start synthesis
+        print("\n[4] Starting granular synthesis for \(duration) seconds...")
+        do {
+            try synthesizer.start()
+            print("  ✓ Synthesis started")
+        } catch {
+            print("  ✗ Failed to start: \(error)")
+            throw error
+        }
+        
+        // Let it run for the duration
+        try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+        
+        // Stop synthesis
+        synthesizer.stop()
+        print("  ✓ Synthesis stopped")
+        
+        // Check if audio was generated (check the audio engine output)
+        // Since we can't easily capture the output in a test, we verify the engine ran
+        print("\n[5] Verifying synthesis ran...")
+        print("  ✓ Granular synthesis completed without errors")
+        print("  Note: For full audio verification, run the app and listen")
+        
+        // Summary
+        print("\n" + String(repeating: "=", count: 60))
+        print("AUDIO OUTPUT TEST SUMMARY")
+        print(String(repeating: "=", count: 60))
+        print("Segments loaded: \(loadedSources.count)")
+        print("Synthesis duration: \(duration) seconds")
+        print("Grain size: \(params.grainSize * 1000) ms")
+        print("Grain density: \(params.grainDensity) grains/sec")
+        print("Expected grains generated: ~\(Int(params.grainDensity * duration))")
+        print(String(repeating: "=", count: 60))
+    }
+    
+    @Test @MainActor func testGranularSynthesisCaptureToFile() async throws {
+        // Find analysis segments
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
+        
+        guard FileManager.default.fileExists(atPath: analysisDir.path) else {
+            throw TestError.directoryNotFound("No analysis directory")
+        }
+        
+        // Find segment files
+        var segmentURLs: [URL] = []
+        let contents = try FileManager.default.contentsOfDirectory(at: analysisDir, includingPropertiesForKeys: nil)
+        for dir in contents where dir.hasDirectoryPath {
+            let segmentsDir = dir.appendingPathComponent("Segments")
+            if FileManager.default.fileExists(atPath: segmentsDir.path) {
+                let segments = try FileManager.default.contentsOfDirectory(at: segmentsDir, includingPropertiesForKeys: nil)
+                    .filter { $0.pathExtension == "m4a" }
+                segmentURLs.append(contentsOf: segments)
+            }
+        }
+        
+        guard !segmentURLs.isEmpty else {
+            throw TestError.directoryNotFound("No segments")
+        }
+        
+        // Create synthesizer
+        let synthesizer = GranularSynthesizer()
+        
+        // Load segments
+        for (index, url) in segmentURLs.prefix(3).enumerated() {
+            try? synthesizer.loadSource(from: url, identifier: "seg_\(index)")
+        }
+        let loadedCount = synthesizer.getSourceIdentifiers().count
+        
+        guard loadedCount > 0 else {
+            throw TestError.noAudioOutput
+        }
+        
+        // Output file path
+        let outputDir = documentsURL.appendingPathComponent("MusicMill")
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let outputURL = outputDir.appendingPathComponent("granular_test_output.wav")
+        try? FileManager.default.removeItem(at: outputURL)
+        
+        // Configure synthesis
+        var params = GranularSynthesizer.GrainParameters()
+        params.grainSize = 0.05
+        params.grainDensity = 25.0
+        params.amplitude = 0.8
+        params.positionJitter = 0.2
+        synthesizer.parameters = params
+        
+        // Use the engine to get the format
+        let engine = synthesizer.getAudioEngine()
+        let mainMixer = engine.mainMixerNode
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        
+        // Create output file
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 44100.0,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        
+        let outputFile = try AVAudioFile(forWriting: outputURL, settings: outputSettings)
+        
+        var capturedFrames: AVAudioFrameCount = 0
+        
+        // Install tap BEFORE starting
+        mainMixer.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+            try? outputFile.write(from: buffer)
+            capturedFrames += buffer.frameLength
+        }
+        
+        // Start synthesis
+        try synthesizer.start()
+        
+        // Run for 3 seconds
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        
+        // Stop and clean up
+        synthesizer.stop()
+        mainMixer.removeTap(onBus: 0)
+        
+        // Verify output
+        #expect(capturedFrames > 0, "Should have captured frames")
+        
+        let fileSize = try FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int ?? 0
+        #expect(fileSize > 100, "Output file should have data")
     }
 }

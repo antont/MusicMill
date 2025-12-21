@@ -14,13 +14,14 @@ struct PerformanceView: View {
         let sampleGenerator = SampleGenerator(granularSynthesizer: granularSynthesizer, sampleLibrary: sampleLibrary)
         let neuralGenerator = NeuralGenerator()
         let synthesisEngine = SynthesisEngine(sampleGenerator: sampleGenerator, neuralGenerator: neuralGenerator)
-        return GenerationController(synthesisEngine: synthesisEngine)
+        return GenerationController(synthesisEngine: synthesisEngine, sampleLibrary: sampleLibrary)
     }()
     
     @State private var selectedTempo: Double = 120.0
     @State private var selectedEnergy: Double = 0.5
     @State private var selectedTrack: TrackSelector.Track?
     @State private var isGenerating = false
+    @State private var hasLoadedSamples = false
     
     var body: some View {
         HStack(spacing: 0) {
@@ -98,6 +99,20 @@ struct PerformanceView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Generation")
                         .font(.headline)
+                    
+                    // Loading status
+                    if generationController.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text(generationController.loadingStatus)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(generationController.loadingStatus)
+                            .font(.caption)
+                            .foregroundColor(generationController.samplesLoaded > 0 ? .green : .secondary)
+                    }
+                    
                     HStack {
                         Button(action: {
                             if isGenerating {
@@ -116,8 +131,19 @@ struct PerformanceView: View {
                                 .font(.title2)
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(generationController.samplesLoaded == 0 || generationController.isLoading)
                         
                         Spacer()
+                        
+                        // Reload button
+                        Button(action: {
+                            Task {
+                                await generationController.loadAvailableSamples()
+                            }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .disabled(generationController.isLoading)
                     }
                 }
                 
@@ -197,6 +223,18 @@ struct PerformanceView: View {
         // Set up track selector with model if available
         if let model = modelManager.currentModel {
             trackSelector.setModel(model)
+        }
+        
+        // Load samples from analysis if not already loaded
+        if !hasLoadedSamples {
+            hasLoadedSamples = true
+            Task {
+                await generationController.loadAvailableSamples()
+                // Update style controller with available styles from samples
+                await MainActor.run {
+                    styleController.updateStyles(from: generationController.availableStyles)
+                }
+            }
         }
     }
     

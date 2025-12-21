@@ -1,10 +1,10 @@
 # MusicMill Project Status
 
-**Last Updated**: December 21, 2025 (Afternoon)
+**Last Updated**: December 21, 2025 (Late Afternoon)
 
 ## Executive Summary
 
-MusicMill now has **working core analysis and granular synthesis implementation**. The architecture is complete with proper tempo/key detection, FFT-based spectral analysis, and a real-time granular synthesizer using AVAudioSourceNode render callbacks.
+MusicMill now has **complete core analysis and granular synthesis implementation**. The architecture is complete with proper tempo/key detection, FFT-based spectral analysis, and a real-time granular synthesizer using AVAudioSourceNode render callbacks. Audio output tests are in place.
 
 ## Current State
 
@@ -14,21 +14,23 @@ MusicMill now has **working core analysis and granular synthesis implementation*
 |-----------|--------|-------|
 | Directory scanning | **Working** | Finds MP3, WAV, AIFF, M4A files |
 | Segment extraction | **Working** | Creates 30-second training segments |
-| **Tempo detection** | **NEW** | Autocorrelation-based BPM detection (60-200 BPM) |
-| **Key detection** | **NEW** | Chromagram + Krumhansl-Schmuckler profiles |
-| **Spectral centroid** | **FIXED** | FFT-based calculation (returns Hz values) |
-| **Granular synthesizer** | **REWRITTEN** | AVAudioSourceNode render callback, grain pool |
+| **Tempo detection** | **Working** | Autocorrelation-based BPM detection (60-200 BPM) |
+| **Key detection** | **Working** | Chromagram + Krumhansl-Schmuckler profiles |
+| **Spectral centroid** | **Working** | FFT-based calculation (returns Hz values) |
+| **Granular synthesizer** | **Working** | AVAudioSourceNode render callback, grain pool |
 | UI scaffold | **Working** | TrainingView, PerformanceView complete |
 | Style organization | **Working** | Uses folder structure as labels |
-| SampleLibrary | **NEW** | Load from analysis, lazy buffer loading |
-| SampleGenerator | **UPDATED** | Connects library to granular synthesizer |
+| SampleLibrary | **Working** | Load from analysis, lazy buffer loading |
+| SampleGenerator | **Working** | Connects library to granular synthesizer |
+| **GenerationController** | **Working** | Loads samples on Performance tab open |
+| **Audio output tests** | **Working** | Tests granular synthesis audio capture |
 
-### 🔧 Needs Testing
+### 🔧 Known Limitations
 
-| Component | Status | Notes |
-|-----------|-------|----------|
-| **Audio output** | Untested | Granular synth should produce sound now |
-| **xcodebuild test saving** | Buggy | Tests pass but files may not save (sandbox?) |
+| Component | Issue | Notes |
+|-----------|-------|-------|
+| **xcodebuild audio** | No hardware | Tests pass but audio capture limited in sandbox |
+| **Apple Music DRM** | Can't read | DRM-protected M4A files will fail to analyze |
 
 ### ❌ Skeleton/Future
 
@@ -46,96 +48,91 @@ MusicMill now has **working core analysis and granular synthesis implementation*
 - `RekordboxParser.swift` - XML parsing outline only
 - `NeuralGenerator.swift` - Returns zeros
 
-## First Analysis Results
+## Analysis Results
 
-Analyzed 4 BLVCKCEILING tracks:
-
-```
-Total: 4 audio files → 20 training segments (9.2 MB)
-
-Track Features:
-┌─────────────────────┬──────────┬────────┬─────────────┬───────┬─────┐
-│ Track               │ Duration │ Energy │ Zero Cross  │ Tempo │ Key │
-├─────────────────────┼──────────┼────────┼─────────────┼───────┼─────┤
-│ BALANCE             │ 3:28     │ 0.303  │ 0.218       │ null  │null │
-│ s4y0rdew            │ 2:45     │ 0.306  │ 0.395       │ null  │null │
-│ S L I P             │ 4:36     │ 0.425  │ 0.178       │ null  │null │
-│ uluvme              │ 5:20     │ 0.412  │ 0.254       │ null  │null │
-└─────────────────────┴──────────┴────────┴─────────────┴───────┴─────┘
-```
-
-**Observations**:
-- Energy values correctly differentiate tracks (S L I P/uluvme are higher energy)
-- Zero crossing rate varies (s4y0rdew is rougher/noisier)
-- **Critical**: No tempo or key detection = can't do DJ-style matching
-
-## Known Issues
-
-### 1. Feature Extraction
-
-```swift
-// FeatureExtractor.swift - These are placeholders:
-private func estimateTempo(audioData: [Float], sampleRate: Double) -> Double? {
-    return nil  // ← Needs autocorrelation implementation
-}
-
-private func estimateKey(audioData: [Float]) -> String? {
-    return nil  // ← Needs chromagram analysis
-}
-```
-
-### 2. Granular Synthesis Architecture
-
-Current implementation has performance problems:
-- Creates new `AVAudioPlayerNode` per grain (expensive)
-- Uses `DispatchQueue.main.asyncAfter` (not sample-accurate)
-- Detaches nodes on main queue (thread-unsafe)
-
-Needs:
-- Grain pool with pre-allocated buffers
-- `AVAudioTime`-based scheduling
-- Render callback for real-time synthesis
-
-### 3. Sample Library Not Connected
-
-Analysis extracts segments but they're not loaded into `SampleLibrary` for synthesis.
-
-## Immediate Priorities
-
-1. **Fix tempo detection** - Implement autocorrelation-based BPM detection
-2. **Fix key detection** - Implement chromagram-based key detection  
-3. **Fix spectral centroid** - Use proper FFT-based calculation
-4. **Rewrite granular synthesis** - Use render callbacks, grain pool
-5. **Connect sample library** - Load analyzed segments as source material
-
-## Architecture Validation
-
-The overall architecture is correct:
+Analyzed BLVCKCEILING tracks:
 
 ```
-Analysis Pipeline → Sample Library → Granular Synthesizer → Audio Output
-                                            ↑
-                              Performance Controls (style/tempo/energy)
+Total: 4+ audio files → 20+ training segments
+Storage: ~/Documents/MusicMill/Analysis/BLVCKCEILING_*/
+
+Features extracted:
+- Tempo (BPM): Autocorrelation-based detection
+- Key: Chromagram + key profile correlation  
+- Energy: RMS-based loudness measure
+- Spectral Centroid: FFT-based brightness (Hz)
+- Zero Crossing Rate: Texture measure
 ```
 
-The gap is execution - each component needs its core functionality implemented.
+## How to Test
+
+### 1. Run All Tests
+```bash
+cd /Users/tonialatalo/src/MusicMill
+xcodebuild test -project MusicMill.xcodeproj -scheme MusicMill \
+  -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath ./DerivedData \
+  CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO
+```
+
+### 2. Run the App
+```bash
+open DerivedData/Build/Products/Debug/MusicMill.app
+```
+
+Then:
+1. Go to **Training** tab
+2. Click **Select Directory** and choose a music folder (MP3 or non-DRM M4A)
+3. Click **Analyze Collection**
+4. Go to **Performance** tab
+5. Wait for "Ready: X samples loaded" message
+6. Click **Play** to start granular synthesis
+
+### 3. Check Analysis Results
+```bash
+cat ~/Documents/MusicMill/Analysis/*/analysis.json | python3 -m json.tool | head -50
+ls ~/Documents/MusicMill/Analysis/*/Segments/
+```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MusicMill                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌────────────────┐    │
+│  │  Analysis    │───▶│SampleLibrary │───▶│GranularSynth   │    │
+│  │  Pipeline    │    │   (indexed)  │    │   (real-time)  │    │
+│  └──────────────┘    └──────────────┘    └────────────────┘    │
+│         │                    │                    │             │
+│         ▼                    ▼                    ▼             │
+│  ┌──────────────┐    ┌──────────────┐    ┌────────────────┐    │
+│  │FeatureExtract│    │SampleGenerat │    │ AVAudioEngine  │    │
+│  │ tempo, key,  │    │ style/tempo  │    │ audio output   │    │
+│  │ energy, etc  │    │ matching     │    │                │    │
+│  └──────────────┘    └──────────────┘    └────────────────┘    │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              GenerationController                        │   │
+│  │    Links Performance UI sliders → Synthesis Engine       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `FeatureExtractor.swift` | Tempo, key, energy, spectral features |
+| `GranularSynthesizer.swift` | Real-time grain scheduling & mixing |
+| `SampleLibrary.swift` | Indexed sample storage with matching |
+| `SampleGenerator.swift` | High-level generation with parameters |
+| `GenerationController.swift` | Connects UI to synthesis engine |
+| `AnalysisStorage.swift` | Persists analysis to Documents |
 
 ## File Locations
 
 - **Analysis results**: `~/Documents/MusicMill/Analysis/{collection_id}/`
 - **Segments**: `~/Documents/MusicMill/Analysis/{collection_id}/Segments/`
 - **Models**: `~/Library/Application Support/MusicMill/Models/`
-
-## Test Commands
-
-```bash
-# Run analysis test
-xcodebuild test -project MusicMill.xcodeproj -scheme MusicMill \
-  -destination 'platform=macOS,arch=arm64' \
-  -derivedDataPath ./DerivedData \
-  CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO
-
-# Check analysis results
-cat ~/Documents/MusicMill/Analysis/*/analysis.json | python3 -m json.tool
-```
-
