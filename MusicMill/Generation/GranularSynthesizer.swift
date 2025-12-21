@@ -23,11 +23,11 @@ class GranularSynthesizer {
     }
     
     struct GrainParameters {
-        var grainSize: TimeInterval = 0.10 // 100ms default (optimal for quality)
-        var grainDensity: Double = 15.0 // Grains per second
+        var grainSize: TimeInterval = 0.10 // 100ms default
+        var grainDensity: Double = 20.0 // Grains per second (balanced overlap)
         var pitch: Float = 1.0 // Playback rate
         var pan: Float = 0.0 // -1 to 1
-        var amplitude: Float = 1.2 // Boost to compensate for windowing
+        var amplitude: Float = 1.0 // Standard amplitude
         var envelopeType: EnvelopeType = .blackman // Less spectral leakage
         var positionJitter: Float = 0.05 // Moderate jitter
         var pitchJitter: Float = 0.01 // Moderate pitch variation
@@ -44,6 +44,10 @@ class GranularSynthesizer {
         var sourceBlend: Float = 0.3 // 0-1: probability of using secondary source
         var autoSourceSwitch: Bool = true // Automatically cycle through sources
         var sourceSwitchInterval: TimeInterval = 8.0 // Seconds between primary source switches
+        
+        // Click reduction - start grains at zero crossings
+        var zeroCrossingStart: Bool = true // Find zero crossing near grain start
+        var zeroCrossingSearchRange: Int = 100 // Search range in samples (~2ms at 44.1kHz)
     }
     
     /// Source buffer with analyzed onset positions for rhythmic alignment
@@ -381,6 +385,15 @@ class GranularSynthesizer {
             }
         }
         
+        // Find nearest zero crossing to reduce clicks
+        if params.zeroCrossingStart {
+            sourcePosition = findNearestZeroCrossing(
+                in: sourceBuffer,
+                near: sourcePosition,
+                searchRange: params.zeroCrossingSearchRange
+            )
+        }
+        
         // Apply pitch jitter
         let pitchJitter = 1.0 + (Float.random(in: -1...1) * params.pitchJitter)
         let pitch = params.pitch * pitchJitter
@@ -637,6 +650,38 @@ class GranularSynthesizer {
         }
         
         return nearestOnset
+    }
+    
+    /// Finds the nearest zero crossing in the audio buffer to reduce clicks
+    private func findNearestZeroCrossing(in buffer: AVAudioPCMBuffer, near position: Int, searchRange: Int) -> Int {
+        guard let channelData = buffer.floatChannelData else { return position }
+        let frameLength = Int(buffer.frameLength)
+        guard frameLength > 0 else { return position }
+        
+        let data = channelData[0]
+        let startSearch = max(0, position - searchRange)
+        let endSearch = min(frameLength - 1, position + searchRange)
+        
+        var bestPosition = position
+        var bestDistance = searchRange + 1
+        
+        // Look for sign changes (zero crossings)
+        for i in startSearch..<endSearch {
+            let current = data[i]
+            let next = data[i + 1]
+            
+            // Check for zero crossing (sign change or actual zero)
+            if (current <= 0 && next >= 0) || (current >= 0 && next <= 0) || abs(current) < 0.001 {
+                let distance = abs(i - position)
+                if distance < bestDistance {
+                    bestDistance = distance
+                    // Choose the sample closer to zero
+                    bestPosition = abs(current) < abs(next) ? i : i + 1
+                }
+            }
+        }
+        
+        return max(0, min(frameLength - 1, bestPosition))
     }
     
     // MARK: - Public API

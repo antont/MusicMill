@@ -21,6 +21,10 @@ class QualityAnalyzer {
         let clarityMatch: Double   // Based on HNR - higher = cleaner audio
         let rhythmMatch: Double    // Based on onset regularity - higher = more rhythmic
         
+        // Click/glitch metrics
+        let clickScore: Double     // 0-1, lower click rate = higher score
+        let clickRateDiff: Double  // Difference in clicks/sec between output and source
+        
         var description: String {
             var lines = ["Quality Score: \(String(format: "%.2f", overall * 100))%"]
             if let tempo = tempoMatch {
@@ -35,6 +39,8 @@ class QualityAnalyzer {
             lines.append("  Noise: \(String(format: "%.2f", noiseMatch * 100))%")
             lines.append("  Clarity: \(String(format: "%.2f", clarityMatch * 100))%")
             lines.append("  Rhythm: \(String(format: "%.2f", rhythmMatch * 100))%")
+            lines.append("  Click-free: \(String(format: "%.2f", clickScore * 100))%")
+            lines.append("  (Click diff: \(String(format: "%.1f", clickRateDiff))/sec)")
             return lines.joined(separator: "\n")
         }
     }
@@ -50,9 +56,10 @@ class QualityAnalyzer {
         var texture: Double = 0.10
         
         // Perceptual quality metrics (higher weights - these matter more for audio quality)
-        var noise: Double = 0.20      // Spectral flatness - penalize noisy output
-        var clarity: Double = 0.20    // HNR - reward clean harmonic content
+        var noise: Double = 0.15      // Spectral flatness - penalize noisy output
+        var clarity: Double = 0.15    // HNR - reward clean harmonic content
         var rhythm: Double = 0.10     // Onset regularity - reward rhythmic coherence
+        var clicks: Double = 0.10     // Click/glitch artifacts - penalize discontinuities
         
         /// Default weights balanced between musical and perceptual quality
         static let `default` = ComparisonWeights()
@@ -61,14 +68,14 @@ class QualityAnalyzer {
         static let timbral = ComparisonWeights(
             tempo: 0.0, key: 0.0, 
             energy: 0.15, spectral: 0.15, texture: 0.10,
-            noise: 0.25, clarity: 0.25, rhythm: 0.10
+            noise: 0.20, clarity: 0.20, rhythm: 0.10, clicks: 0.10
         )
         
         /// Weights focusing on perceptual quality (artifacts, noise, rhythm)
         static let perceptual = ComparisonWeights(
             tempo: 0.05, key: 0.05,
             energy: 0.05, spectral: 0.05, texture: 0.05,
-            noise: 0.30, clarity: 0.30, rhythm: 0.15
+            noise: 0.25, clarity: 0.25, rhythm: 0.10, clicks: 0.15
         )
     }
     
@@ -176,20 +183,21 @@ class QualityAnalyzer {
         
         // Clarity match: Compare HNR (harmonic-to-noise ratio)
         // Higher HNR = cleaner audio
-        // We want output to have similar or higher HNR than source
+        // Note: HNR can be very low or even negative for noisy/complex audio
         let clarityMatch: Double
-        if source.harmonicToNoiseRatio > 0 {
-            // If output has higher or similar HNR, that's good
-            if output.harmonicToNoiseRatio >= source.harmonicToNoiseRatio * 0.8 {
-                clarityMatch = min(1.0, output.harmonicToNoiseRatio / source.harmonicToNoiseRatio)
-            } else {
-                // Output has significantly lower HNR - more artifacts
-                let hnrRatio = output.harmonicToNoiseRatio / source.harmonicToNoiseRatio
-                clarityMatch = max(0, hnrRatio)
-            }
+        // Both values could be low or zero - compare on absolute scale
+        // HNR typically ranges from -10 to +30 dB for music
+        // Shift to positive scale: add 10 to both
+        let sourceHNR = source.harmonicToNoiseRatio + 10.0
+        let outputHNR = output.harmonicToNoiseRatio + 10.0
+        
+        if sourceHNR > 0 && outputHNR > 0 {
+            // Ratio-based comparison (both on positive scale now)
+            let ratio = min(outputHNR, sourceHNR) / max(outputHNR, sourceHNR)
+            clarityMatch = ratio
         } else {
-            // Default: higher HNR is better (normalize to 0-1 assuming max HNR of 30)
-            clarityMatch = min(1.0, output.harmonicToNoiseRatio / 20.0)
+            // Fallback: just check if output HNR is reasonable
+            clarityMatch = max(0, min(1.0, (output.harmonicToNoiseRatio + 10.0) / 20.0))
         }
         
         // Rhythm match: Compare onset regularity
@@ -208,6 +216,23 @@ class QualityAnalyzer {
         } else {
             // Source itself is irregular - just check if output is reasonable
             rhythmMatch = max(0, 1.0 - output.onsetRegularity)
+        }
+        
+        // MARK: - Click/Glitch Detection
+        
+        // Click score: Penalize output that has more clicks than source
+        // Click rate difference: how many more clicks/sec the output has
+        let clickRateDiff = output.clickRate - source.clickRate
+        
+        // Score: 1.0 if output has same or fewer clicks, decreases as clicks increase
+        // Every 10 clicks/sec extra reduces score significantly
+        let clickScore: Double
+        if clickRateDiff <= 0 {
+            clickScore = 1.0 // Output has same or fewer clicks - perfect
+        } else {
+            // Penalize based on extra clicks
+            // 10 clicks/sec extra = 50% score, 20 extra = 25%, etc.
+            clickScore = max(0, 1.0 / (1.0 + clickRateDiff / 10.0))
         }
         
         // Calculate overall score
@@ -243,6 +268,9 @@ class QualityAnalyzer {
         overallScore += rhythmMatch * weights.rhythm
         totalWeight += weights.rhythm
         
+        overallScore += clickScore * weights.clicks
+        totalWeight += weights.clicks
+        
         // Normalize by total weight
         if totalWeight > 0 {
             overallScore /= totalWeight
@@ -257,7 +285,9 @@ class QualityAnalyzer {
             textureMatch: textureMatch,
             noiseMatch: noiseMatch,
             clarityMatch: clarityMatch,
-            rhythmMatch: rhythmMatch
+            rhythmMatch: rhythmMatch,
+            clickScore: clickScore,
+            clickRateDiff: clickRateDiff
         )
     }
     

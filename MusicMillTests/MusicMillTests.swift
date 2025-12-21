@@ -458,11 +458,11 @@ struct MusicMillTests {
         let outputURL = outputDir.appendingPathComponent("quality_test_output.wav")
         try? FileManager.default.removeItem(at: outputURL)
         
-        // Configure synthesis - with rhythm alignment, position evolution, and multi-source blending
+        // Configure synthesis - with all click reduction features
         var params = GranularSynthesizer.GrainParameters()
         params.grainSize = 0.10 // 100ms grains
-        params.grainDensity = 15.0
-        params.amplitude = 1.2
+        params.grainDensity = 20.0 // Balanced overlap
+        params.amplitude = 1.0
         params.positionJitter = 0.05
         params.pitchJitter = 0.01
         params.envelopeType = .blackman
@@ -473,6 +473,8 @@ struct MusicMillTests {
         params.sourceBlend = 0.3 // 30% chance to use secondary source
         params.autoSourceSwitch = true // Auto-cycle through sources
         params.sourceSwitchInterval = 4.0 // Switch every 4 seconds for test
+        params.zeroCrossingStart = true // Start grains at zero crossings
+        params.zeroCrossingSearchRange = 100 // Search ~2ms for zero crossing
         synthesizer.parameters = params
 
         // Set up audio capture
@@ -585,6 +587,8 @@ struct MusicMillTests {
         Spectral Flatness: \(String(format: "%.4f", source.spectralFlatness)) (0=tonal, 1=noise)
         HNR: \(String(format: "%.1f dB", source.harmonicToNoiseRatio)) (higher=cleaner)
         Onset Regularity: \(String(format: "%.4f", source.onsetRegularity)) (0=regular, 1=chaotic)
+        Click Rate: \(String(format: "%.1f/sec", source.clickRate))
+        Click Intensity: \(String(format: "%.4f", source.clickIntensity))
         
         OUTPUT AUDIO (Granular Synthesis)
         ---------------------------------
@@ -599,6 +603,8 @@ struct MusicMillTests {
         Spectral Flatness: \(String(format: "%.4f", outputFeatures.spectralFlatness)) (0=tonal, 1=noise)
         HNR: \(String(format: "%.1f dB", outputFeatures.harmonicToNoiseRatio)) (higher=cleaner)
         Onset Regularity: \(String(format: "%.4f", outputFeatures.onsetRegularity)) (0=regular, 1=chaotic)
+        Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))
+        Click Intensity: \(String(format: "%.4f", outputFeatures.clickIntensity))
         
         QUALITY SCORES
         --------------
@@ -627,6 +633,8 @@ struct MusicMillTests {
           Noise Match:    \(String(format: "%5.1f%%", quality.noiseMatch * 100)) (higher=less noisy than source)
           Clarity Match:  \(String(format: "%5.1f%%", quality.clarityMatch * 100)) (higher=cleaner audio)
           Rhythm Match:   \(String(format: "%5.1f%%", quality.rhythmMatch * 100)) (higher=more rhythmic)
+          Click-free:    \(String(format: "%5.1f%%", quality.clickScore * 100)) (higher=fewer clicks)
+          Click Diff:    \(String(format: "%+.1f/sec", quality.clickRateDiff)) (negative=better)
         
         QUALITY TARGETS
         ---------------

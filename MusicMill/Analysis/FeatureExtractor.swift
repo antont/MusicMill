@@ -25,6 +25,10 @@ class FeatureExtractor {
         let spectralFlatness: Double // 0-1, lower = more tonal (music-like), higher = noise-like
         let harmonicToNoiseRatio: Double // dB, higher = cleaner audio, lower = more noise/artifacts
         let onsetRegularity: Double // Std dev of inter-onset intervals, lower = more rhythmic
+        
+        // Click/glitch detection
+        let clickRate: Double // Clicks per second (sudden amplitude jumps)
+        let clickIntensity: Double // Average magnitude of detected clicks
     }
     
     /// Extracts features from an audio file
@@ -56,6 +60,9 @@ class FeatureExtractor {
         let harmonicToNoiseRatio = calculateHarmonicToNoiseRatio(audioData: monoData)
         let onsetRegularity = calculateOnsetRegularity(audioData: monoData)
         
+        // Click/glitch detection
+        let (clickRate, clickIntensity) = detectClicks(audioData: monoData, sampleRate: sampleRate)
+        
         return AudioFeatures(
             tempo: tempo,
             key: key,
@@ -66,7 +73,9 @@ class FeatureExtractor {
             duration: durationSeconds,
             spectralFlatness: spectralFlatness,
             harmonicToNoiseRatio: harmonicToNoiseRatio,
-            onsetRegularity: onsetRegularity
+            onsetRegularity: onsetRegularity,
+            clickRate: clickRate,
+            clickIntensity: clickIntensity
         )
     }
     
@@ -84,7 +93,9 @@ class FeatureExtractor {
                 duration: 0,
                 spectralFlatness: 1.0, // Assume noise if no data
                 harmonicToNoiseRatio: 0,
-                onsetRegularity: 1.0 // Assume irregular
+                onsetRegularity: 1.0, // Assume irregular
+                clickRate: 0,
+                clickIntensity: 0
             )
         }
         
@@ -129,6 +140,9 @@ class FeatureExtractor {
         let harmonicToNoiseRatio = calculateHarmonicToNoiseRatio(audioData: analysisData)
         let onsetRegularity = calculateOnsetRegularity(audioData: analysisData)
         
+        // Click/glitch detection
+        let (clickRate, clickIntensity) = detectClicks(audioData: analysisData, sampleRate: sampleRate)
+        
         return AudioFeatures(
             tempo: tempo,
             key: key,
@@ -139,7 +153,9 @@ class FeatureExtractor {
             duration: durationSeconds,
             spectralFlatness: spectralFlatness,
             harmonicToNoiseRatio: harmonicToNoiseRatio,
-            onsetRegularity: onsetRegularity
+            onsetRegularity: onsetRegularity,
+            clickRate: clickRate,
+            clickIntensity: clickIntensity
         )
     }
     
@@ -792,6 +808,51 @@ class FeatureExtractor {
         let mad = sortedDeviations[sortedDeviations.count / 2]
         
         return median + 1.5 * mad
+    }
+    
+    /// Detects clicks/glitches in audio (sudden amplitude discontinuities)
+    /// Returns (clickRate: clicks per second, clickIntensity: average magnitude)
+    private func detectClicks(audioData: [Float], sampleRate: Double) -> (Double, Double) {
+        guard audioData.count > 1 else { return (0.0, 0.0) }
+        
+        // Calculate sample-to-sample differences
+        var differences: [Float] = []
+        for i in 1..<audioData.count {
+            differences.append(abs(audioData[i] - audioData[i-1]))
+        }
+        
+        // Calculate statistics for adaptive threshold
+        let sortedDiffs = differences.sorted()
+        let medianDiff = sortedDiffs[sortedDiffs.count / 2]
+        let deviations = differences.map { abs($0 - medianDiff) }
+        let sortedDevs = deviations.sorted()
+        let mad = sortedDevs[sortedDevs.count / 2]
+        
+        // Threshold: differences significantly larger than normal
+        // A click is a jump > median + 5 * MAD (very conservative)
+        let threshold = medianDiff + 5.0 * mad
+        let minThreshold: Float = 0.1 // Minimum absolute threshold to avoid noise
+        let effectiveThreshold = max(threshold, minThreshold)
+        
+        // Count clicks and accumulate intensity
+        var clickCount = 0
+        var totalIntensity: Float = 0.0
+        var lastClickIndex = -100 // Avoid counting same click multiple times
+        
+        for i in 0..<differences.count {
+            if differences[i] > effectiveThreshold && (i - lastClickIndex) > 10 {
+                clickCount += 1
+                totalIntensity += differences[i]
+                lastClickIndex = i
+            }
+        }
+        
+        // Calculate metrics
+        let durationSeconds = Double(audioData.count) / sampleRate
+        let clickRate = durationSeconds > 0 ? Double(clickCount) / durationSeconds : 0.0
+        let clickIntensity = clickCount > 0 ? Double(totalIntensity) / Double(clickCount) : 0.0
+        
+        return (clickRate, clickIntensity)
     }
     
     enum FeatureExtractorError: LocalizedError {
