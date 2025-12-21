@@ -16,14 +16,14 @@ class GranularSynthesizer {
     }
     
     struct GrainParameters {
-        var grainSize: TimeInterval = 0.10 // 100ms default (larger = smoother)
-        var grainDensity: Double = 15.0 // Grains per second (lower = less overlap artifacts)
+        var grainSize: TimeInterval = 0.10 // 100ms default (optimal for quality)
+        var grainDensity: Double = 15.0 // Grains per second
         var pitch: Float = 1.0 // Playback rate
         var pan: Float = 0.0 // -1 to 1
-        var amplitude: Float = 1.2 // Boost to compensate for windowing energy loss
-        var envelopeType: EnvelopeType = .blackman // Smoother than Hann, less spectral leakage
-        var positionJitter: Float = 0.05 // Lower jitter = more coherent sound
-        var pitchJitter: Float = 0.01 // Lower pitch variation
+        var amplitude: Float = 1.2 // Boost to compensate for windowing
+        var envelopeType: EnvelopeType = .blackman // Less spectral leakage
+        var positionJitter: Float = 0.05 // Moderate jitter
+        var pitchJitter: Float = 0.01 // Moderate pitch variation
     }
     
     /// Internal grain representation for scheduling
@@ -61,6 +61,11 @@ class GranularSynthesizer {
     private var blackmanWindow: [Float] = []
     private var triangleWindow: [Float] = []
     private let maxGrainSamples = 8820 // 200ms at 44100 Hz
+    
+    // Low-pass filter state (one-pole IIR) - reduces grain artifacts
+    private var lpfLeftState: Float = 0.0
+    private var lpfRightState: Float = 0.0
+    private let lpfCutoff: Float = 10000.0 // Hz - balanced cutoff
     
     // Parameters (can be changed in real-time)
     private var _parameters = GrainParameters()
@@ -214,9 +219,12 @@ class GranularSynthesizer {
             activeGrains.removeAll { !$0.isActive }
             grainsLock.unlock()
             
+            // Apply low-pass filter to reduce grain artifacts
+            let (filteredLeft, filteredRight) = lowPassFilter(left: leftSample, right: rightSample)
+            
             // Soft clip to prevent harsh clipping
-            leftData[sample] = softClip(leftSample)
-            rightData[sample] = softClip(rightSample)
+            leftData[sample] = softClip(filteredLeft)
+            rightData[sample] = softClip(filteredRight)
         }
         
         return noErr
@@ -357,6 +365,21 @@ class GranularSynthesizer {
             return -1.0 + exp(1.0 + x)
         }
         return x
+    }
+    
+    /// One-pole low-pass filter coefficient
+    private var lpfAlpha: Float {
+        let rc = 1.0 / (2.0 * Float.pi * lpfCutoff)
+        let dt = 1.0 / Float(sampleRate)
+        return dt / (rc + dt)
+    }
+    
+    /// Apply low-pass filter to reduce grain artifacts
+    private func lowPassFilter(left: Float, right: Float) -> (Float, Float) {
+        let alpha = lpfAlpha
+        lpfLeftState = lpfLeftState + alpha * (left - lpfLeftState)
+        lpfRightState = lpfRightState + alpha * (right - lpfRightState)
+        return (lpfLeftState, lpfRightState)
     }
     
     // MARK: - Public API

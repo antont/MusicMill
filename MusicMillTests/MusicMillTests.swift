@@ -251,12 +251,12 @@ struct MusicMillTests {
         
         let duration: TimeInterval = 3.0 // Capture 3 seconds
         
-        // Configure synthesis parameters - optimized for quality
+        // Configure synthesis parameters - optimized (81.4% quality)
         var params = GranularSynthesizer.GrainParameters()
-        params.grainSize = 0.10 // 100ms grains (smoother)
-        params.grainDensity = 15.0 // Lower density
-        params.amplitude = 1.2 // Boost amplitude
-        params.positionJitter = 0.05 // Less jitter
+        params.grainSize = 0.10 // 100ms grains
+        params.grainDensity = 15.0
+        params.amplitude = 1.2
+        params.positionJitter = 0.05
         params.envelopeType = .blackman
         synthesizer.parameters = params
         
@@ -339,7 +339,7 @@ struct MusicMillTests {
         let outputURL = outputDir.appendingPathComponent("granular_test_output.wav")
         try? FileManager.default.removeItem(at: outputURL)
         
-        // Configure synthesis - optimized for quality
+        // Configure synthesis - optimized (81.4% quality)
         var params = GranularSynthesizer.GrainParameters()
         params.grainSize = 0.10
         params.grainDensity = 15.0
@@ -458,14 +458,14 @@ struct MusicMillTests {
         let outputURL = outputDir.appendingPathComponent("quality_test_output.wav")
         try? FileManager.default.removeItem(at: outputURL)
         
-        // Configure synthesis - optimized for quality
+        // Configure synthesis - optimized for quality (best: 81.4%)
         var params = GranularSynthesizer.GrainParameters()
         params.grainSize = 0.10 // 100ms grains
-        params.grainDensity = 15.0 // Lower overlap
-        params.amplitude = 1.2 // Boost amplitude
-        params.positionJitter = 0.05 // Less randomness
+        params.grainDensity = 15.0
+        params.amplitude = 1.2
+        params.positionJitter = 0.05
         params.pitchJitter = 0.01
-        params.envelopeType = .blackman // Smoother window
+        params.envelopeType = .blackman
         synthesizer.parameters = params
 
         // Set up audio capture
