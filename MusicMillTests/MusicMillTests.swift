@@ -485,8 +485,9 @@ struct MusicMillTests {
         let outputFile = try AVAudioFile(forWriting: outputURL, settings: outputSettings)
         var capturedFrames: AVAudioFrameCount = 0
         
-        // Capture buffer for analysis
-        let analysisBufferCapacity = AVAudioFrameCount(44100 * 5) // 5 seconds
+        // Capture buffer for analysis - balanced duration
+        let analysisDuration: TimeInterval = 10.0 // 10 seconds - balance between stability and consistency
+        let analysisBufferCapacity = AVAudioFrameCount(44100.0 * analysisDuration)
         let analysisBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: analysisBufferCapacity)!
         
         mainMixer.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
@@ -507,10 +508,10 @@ struct MusicMillTests {
             capturedFrames += buffer.frameLength
         }
         
-        // Start synthesis
-        print("\n[4] Running synthesis for 3 seconds...")
+        // Start synthesis - run longer for stable feature detection
+        print("\n[4] Running synthesis for \(Int(analysisDuration)) seconds...")
         try synthesizer.start()
-        try await Task.sleep(nanoseconds: 3_000_000_000)
+        try await Task.sleep(nanoseconds: UInt64(analysisDuration * 1_000_000_000))
         synthesizer.stop()
         mainMixer.removeTap(onBus: 0)
         
