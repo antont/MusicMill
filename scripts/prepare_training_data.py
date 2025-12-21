@@ -15,8 +15,9 @@ from pathlib import Path
 import argparse
 
 # Configuration
-ANALYSIS_DIR = Path.home() / "Documents" / "MusicMill" / "Analysis"
-PREPROCESSED_DIR = Path.home() / ".musicmill" / "rave_preprocessed"
+MUSICMILL_DIR = Path.home() / "Documents" / "MusicMill"
+ANALYSIS_DIR = MUSICMILL_DIR / "Analysis"
+PREPROCESSED_DIR = MUSICMILL_DIR / "RAVE" / "preprocessed"
 
 
 def find_audio_files(input_path: Path, recursive: bool = True):

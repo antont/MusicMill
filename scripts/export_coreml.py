@@ -17,8 +17,9 @@ except ImportError:
     sys.exit(1)
 
 # Paths
-MODELS_DIR = Path.home() / ".musicmill" / "rave_models"
-COREML_DIR = Path.home() / ".musicmill" / "coreml_models"
+MUSICMILL_DIR = Path.home() / "Documents" / "MusicMill"
+MODELS_DIR = MUSICMILL_DIR / "RAVE" / "models"
+COREML_DIR = MUSICMILL_DIR / "RAVE" / "coreml"
 APP_MODELS_DIR = Path(__file__).parent.parent / "MusicMill" / "ML" / "Models"
 
 

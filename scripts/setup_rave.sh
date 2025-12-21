@@ -12,7 +12,7 @@ PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)
 echo "Python version: $PYTHON_VERSION"
 
 # Create virtual environment
-VENV_PATH="$HOME/.musicmill/rave_env"
+VENV_PATH="$HOME/Documents/MusicMill/RAVE/venv"
 if [ ! -d "$VENV_PATH" ]; then
     echo "Creating virtual environment at $VENV_PATH..."
     python3 -m venv "$VENV_PATH"

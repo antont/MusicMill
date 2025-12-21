@@ -20,8 +20,9 @@ from pathlib import Path
 import argparse
 
 # Paths
-PREPROCESSED_DIR = Path.home() / ".musicmill" / "rave_preprocessed"
-MODELS_DIR = Path.home() / ".musicmill" / "rave_models"
+MUSICMILL_DIR = Path.home() / "Documents" / "MusicMill"
+PREPROCESSED_DIR = MUSICMILL_DIR / "RAVE" / "preprocessed"
+MODELS_DIR = MUSICMILL_DIR / "RAVE" / "models"
 
 
 def check_rave_installed():
