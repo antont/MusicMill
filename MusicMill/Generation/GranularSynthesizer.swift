@@ -15,6 +15,13 @@ class GranularSynthesizer {
         case triangle
     }
     
+    enum EvolutionMode {
+        case forward    // Scan forward through source
+        case backward   // Scan backward
+        case pingPong   // Back and forth
+        case random     // Jump to random positions periodically
+    }
+    
     struct GrainParameters {
         var grainSize: TimeInterval = 0.10 // 100ms default (optimal for quality)
         var grainDensity: Double = 15.0 // Grains per second
@@ -28,6 +35,10 @@ class GranularSynthesizer {
         // Rhythm alignment parameters
         var rhythmAlignment: Float = 0.8 // 0 = random, 1 = snap to onsets
         var tempoSync: Bool = true // Sync grain rate to detected tempo
+        
+        // Position evolution - scan through source over time
+        var positionEvolution: Float = 0.1 // Speed of position change (0=static, 1=fast)
+        var evolutionMode: EvolutionMode = .pingPong // How position evolves
     }
     
     /// Source buffer with analyzed onset positions for rhythmic alignment
@@ -100,6 +111,10 @@ class GranularSynthesizer {
     private var isPlaying = false
     private var currentSourceIndex: Int = 0
     private var currentPosition: Float = 0.0 // 0-1 position in current source
+    
+    // Position evolution state
+    private var evolutionDirection: Float = 1.0 // 1 = forward, -1 = backward (for pingPong)
+    private var samplesSinceRandomJump: Int = 0 // Timer for random mode
     
     // MARK: - Initialization
     
@@ -215,6 +230,42 @@ class GranularSynthesizer {
                 // Sync grain rate to tempo: 4 grains per beat (16th notes)
                 // Use at least 8 grains/sec for sufficient coverage
                 effectiveGrainDensity = max(8.0, tempo / 60.0 * 4.0)
+            }
+        }
+        
+        // Evolve position over time (creates variety instead of static loop)
+        if params.positionEvolution > 0 {
+            // Evolution speed: at 1.0, scan full source in ~10 seconds
+            let evolutionSpeed = params.positionEvolution * 0.0001
+            let frameDelta = evolutionSpeed * Float(frameCount)
+            
+            switch params.evolutionMode {
+            case .forward:
+                currentPosition += frameDelta
+                if currentPosition >= 1.0 { currentPosition = 0.0 }
+                
+            case .backward:
+                currentPosition -= frameDelta
+                if currentPosition <= 0.0 { currentPosition = 1.0 }
+                
+            case .pingPong:
+                currentPosition += frameDelta * evolutionDirection
+                if currentPosition >= 0.95 {
+                    evolutionDirection = -1.0
+                    currentPosition = 0.95
+                } else if currentPosition <= 0.05 {
+                    evolutionDirection = 1.0
+                    currentPosition = 0.05
+                }
+                
+            case .random:
+                // Jump to random position every ~2 seconds
+                samplesSinceRandomJump += Int(frameCount)
+                let jumpIntervalSamples = Int(sampleRate * 2.0)
+                if samplesSinceRandomJump >= jumpIntervalSamples {
+                    currentPosition = Float.random(in: 0.1...0.9)
+                    samplesSinceRandomJump = 0
+                }
             }
         }
         
