@@ -16,14 +16,14 @@ class GranularSynthesizer {
     }
     
     struct GrainParameters {
-        var grainSize: TimeInterval = 0.05 // 50ms default
-        var grainDensity: Double = 20.0 // Grains per second
+        var grainSize: TimeInterval = 0.10 // 100ms default (larger = smoother)
+        var grainDensity: Double = 15.0 // Grains per second (lower = less overlap artifacts)
         var pitch: Float = 1.0 // Playback rate
         var pan: Float = 0.0 // -1 to 1
-        var amplitude: Float = 0.8
-        var envelopeType: EnvelopeType = .hann
-        var positionJitter: Float = 0.1 // Random position variation (0-1)
-        var pitchJitter: Float = 0.02 // Random pitch variation
+        var amplitude: Float = 1.2 // Boost to compensate for windowing energy loss
+        var envelopeType: EnvelopeType = .blackman // Smoother than Hann, less spectral leakage
+        var positionJitter: Float = 0.05 // Lower jitter = more coherent sound
+        var pitchJitter: Float = 0.01 // Lower pitch variation
     }
     
     /// Internal grain representation for scheduling
