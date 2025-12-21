@@ -39,6 +39,11 @@ class GranularSynthesizer {
         // Position evolution - scan through source over time
         var positionEvolution: Float = 0.1 // Speed of position change (0=static, 1=fast)
         var evolutionMode: EvolutionMode = .pingPong // How position evolves
+        
+        // Multi-source blending - use multiple sources for variety
+        var sourceBlend: Float = 0.3 // 0-1: probability of using secondary source
+        var autoSourceSwitch: Bool = true // Automatically cycle through sources
+        var sourceSwitchInterval: TimeInterval = 8.0 // Seconds between primary source switches
     }
     
     /// Source buffer with analyzed onset positions for rhythmic alignment
@@ -115,6 +120,10 @@ class GranularSynthesizer {
     // Position evolution state
     private var evolutionDirection: Float = 1.0 // 1 = forward, -1 = backward (for pingPong)
     private var samplesSinceRandomJump: Int = 0 // Timer for random mode
+    
+    // Multi-source blending state
+    private var samplesSinceSourceSwitch: Int = 0 // Timer for auto source switching
+    private var secondarySourceIndex: Int = 1 // Index of secondary source for blending
     
     // MARK: - Initialization
     
@@ -269,6 +278,23 @@ class GranularSynthesizer {
             }
         }
         
+        // Auto source switching (cycle through available sources)
+        sourceBuffersLock.lock()
+        let sourceCount = sourceBuffers.count
+        sourceBuffersLock.unlock()
+        
+        if params.autoSourceSwitch && sourceCount > 1 {
+            samplesSinceSourceSwitch += Int(frameCount)
+            let switchIntervalSamples = Int(sampleRate * params.sourceSwitchInterval)
+            
+            if samplesSinceSourceSwitch >= switchIntervalSamples {
+                currentSourceIndex = (currentSourceIndex + 1) % sourceCount
+                // Keep secondary source different from primary
+                secondarySourceIndex = (currentSourceIndex + 1) % sourceCount
+                samplesSinceSourceSwitch = 0
+            }
+        }
+        
         // Process each sample
         for sample in 0..<Int(frameCount) {
             // Schedule new grains based on density
@@ -316,8 +342,18 @@ class GranularSynthesizer {
             return
         }
         
-        // Select source buffer
-        let bufferIndex = currentSourceIndex % sourceBuffers.count
+        // Select source buffer with blending
+        // Primary source or secondary based on blend probability
+        let sourceCount = sourceBuffers.count
+        var bufferIndex = currentSourceIndex % sourceCount
+        
+        if sourceCount > 1 && params.sourceBlend > 0 {
+            // Randomly use secondary source based on blend factor
+            if Float.random(in: 0...1) < params.sourceBlend {
+                bufferIndex = secondarySourceIndex % sourceCount
+            }
+        }
+        
         let sourceInfo = sourceBuffers[bufferIndex]
         let sourceBuffer = sourceInfo.buffer
         let onsets = sourceInfo.onsets

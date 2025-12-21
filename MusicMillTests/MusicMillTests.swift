@@ -458,7 +458,7 @@ struct MusicMillTests {
         let outputURL = outputDir.appendingPathComponent("quality_test_output.wav")
         try? FileManager.default.removeItem(at: outputURL)
         
-        // Configure synthesis - with rhythm alignment and position evolution
+        // Configure synthesis - with rhythm alignment, position evolution, and multi-source blending
         var params = GranularSynthesizer.GrainParameters()
         params.grainSize = 0.10 // 100ms grains
         params.grainDensity = 15.0
@@ -470,6 +470,9 @@ struct MusicMillTests {
         params.tempoSync = true // Sync grain rate to source tempo
         params.positionEvolution = 0.2 // Scan through source
         params.evolutionMode = .pingPong // Back and forth
+        params.sourceBlend = 0.3 // 30% chance to use secondary source
+        params.autoSourceSwitch = true // Auto-cycle through sources
+        params.sourceSwitchInterval = 4.0 // Switch every 4 seconds for test
         synthesizer.parameters = params
 
         // Set up audio capture
