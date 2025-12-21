@@ -33,12 +33,13 @@ The generative model learns from your DJ collection using:
 ### In Progress
 - **Tempo Detection**: Implementing autocorrelation-based BPM detection
 - **Key Detection**: Implementing chromagram-based key analysis
-- **Granular Synthesis**: Rewriting for proper real-time audio output
+- **Granular Synthesis**: Real-time grain-based audio generation
+- **RAVE Neural Synthesis**: Deep learning audio generation via PyTorch MPS
 
 ### Planned
 - **Real-time Generative Synthesis**: Generate new audio using granular synthesis
 - **Style-guided Generation**: Control output style using classification
-- **Neural Synthesis**: Pure neural audio generation (future, requires more data)
+- **RAVE-based Instrument**: Train RAVE on your collection for neural synthesis
 
 ### Known Limitations
 - DRM-protected files (Apple Music M4A) cannot be analyzed
@@ -71,9 +72,17 @@ MusicMill/
 ├── MusicMill/
 │   ├── App/              # App entry point and main views
 │   ├── Analysis/         # Audio analysis and feature extraction
-│   ├── ML/               # Model training (classification + generation)
-│   ├── Performance/      # Live performance interface & generative engine
+│   ├── Generation/       # Synthesis engines (granular, neural)
+│   ├── ML/               # Model training (classification)
+│   ├── Performance/      # Live performance interface
 │   └── Training/         # Training UI
+├── scripts/
+│   ├── rave_server.py    # RAVE inference server
+│   ├── setup_rave.sh     # Python environment setup
+│   └── synth.sh          # Quick synthesis test
+├── docs/
+│   ├── RAVE_INTEGRATION.md  # Neural synthesis documentation
+│   └── plans/            # Development plans
 └── README.md
 ```
 
@@ -105,11 +114,41 @@ MusicMill/
 5. Use mixing controls (crossfade, volume, EQ) for live performance
 6. (Helper) View example tracks/segments that match current output for debugging
 
+## Synthesis Approaches
+
+MusicMill supports multiple synthesis backends:
+
+### 1. Granular Synthesis (Swift/Native)
+- Breaks audio into small "grains" (10-100ms)
+- Recombines grains with pitch/time manipulation
+- Low latency, runs natively in Swift
+- Good for texture and ambient generation
+
+### 2. RAVE Neural Synthesis (PyTorch MPS)
+- Deep learning variational autoencoder for audio
+- Trained on your music collection
+- Generates continuous, musical output
+- Runs at **291x realtime** on M3 Max via MPS
+
+#### RAVE Control Mapping
+
+| MusicMill Control | RAVE Implementation |
+|-------------------|---------------------|
+| **Style** | Interpolate between encoded style anchors |
+| **Energy** | Scale latent magnitude (0.3x - 2.0x) |
+| **Tempo** | Stretch/compress latent time axis |
+| **Timbre** | Individual latent dimension weights |
+
+The key insight: RAVE compresses audio into a low-dimensional latent space (4 dimensions). Each dimension captures different audio characteristics. By encoding reference tracks from your collection and manipulating these latent vectors, you get intuitive control over the generated output.
+
+See `docs/RAVE_INTEGRATION.md` for detailed technical documentation.
+
 ## Technical Details
 
 - Uses AVFoundation for audio I/O and real-time synthesis
 - MLSoundClassifier for style/genre classification (stepping stone)
-- Core ML for model inference
+- Core ML for model inference (classification)
+- **PyTorch MPS** for RAVE neural synthesis (Apple Silicon GPU)
 - SwiftUI for the user interface
 - Combine framework for reactive programming
 - **Challenge**: Real-time audio generation is complex - initial output may be experimental/poor quality, but that's part of the exploration
@@ -136,9 +175,10 @@ The system can learn from multiple sources:
 
 ## Future Enhancements
 
-- **Generative Model Implementation**: Core audio synthesis engine (primary goal)
-- **Improved Generation Quality**: Better models and techniques for higher quality output
-- **MIDI Integration**: External controllers for live performance
-- **Advanced Effects**: Real-time audio effects and processing
-- **Multi-layer Synthesis**: Simultaneous generation of multiple audio layers
+- **RAVE Training Pipeline**: Train custom models on your DJ collection
+- **Latent Space Exploration**: Tools to find meaningful control axes in trained models
+- **Style Anchors**: Encode reference tracks to create style interpolation targets
+- **MIDI Integration**: Map external controllers to latent space parameters
+- **Multi-layer Synthesis**: Blend granular and neural approaches
 - **Recording and Export**: Save generated performances
+- **MLX Port**: Native Apple Silicon neural synthesis (alternative to PyTorch)
