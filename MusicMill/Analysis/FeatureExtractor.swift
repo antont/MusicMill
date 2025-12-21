@@ -29,6 +29,12 @@ class FeatureExtractor {
         // Click/glitch detection
         let clickRate: Double // Clicks per second (sudden amplitude jumps)
         let clickIntensity: Double // Average magnitude of detected clicks
+        
+        // Concatenative synthesis features
+        let spectralEmbedding: [Float] // 64-dim mel-spectrogram average for similarity
+        let onsetPositions: [Double] // Onset times in seconds for beat-aligned transitions
+        let startSpectrum: [Float] // First 100ms spectral profile for crossfade matching
+        let endSpectrum: [Float] // Last 100ms spectral profile for crossfade matching
     }
     
     /// Extracts features from an audio file
@@ -63,6 +69,12 @@ class FeatureExtractor {
         // Click/glitch detection
         let (clickRate, clickIntensity) = detectClicks(audioData: monoData, sampleRate: sampleRate)
         
+        // Concatenative synthesis features
+        let spectralEmbedding = computeSpectralEmbedding(audioData: monoData)
+        let onsetPositions = detectOnsetPositions(audioData: monoData)
+        let startSpectrum = computeSpectralProfile(audioData: monoData, atStart: true)
+        let endSpectrum = computeSpectralProfile(audioData: monoData, atStart: false)
+        
         return AudioFeatures(
             tempo: tempo,
             key: key,
@@ -75,7 +87,11 @@ class FeatureExtractor {
             harmonicToNoiseRatio: harmonicToNoiseRatio,
             onsetRegularity: onsetRegularity,
             clickRate: clickRate,
-            clickIntensity: clickIntensity
+            clickIntensity: clickIntensity,
+            spectralEmbedding: spectralEmbedding,
+            onsetPositions: onsetPositions,
+            startSpectrum: startSpectrum,
+            endSpectrum: endSpectrum
         )
     }
     
@@ -95,7 +111,11 @@ class FeatureExtractor {
                 harmonicToNoiseRatio: 0,
                 onsetRegularity: 1.0, // Assume irregular
                 clickRate: 0,
-                clickIntensity: 0
+                clickIntensity: 0,
+                spectralEmbedding: [],
+                onsetPositions: [],
+                startSpectrum: [],
+                endSpectrum: []
             )
         }
         
@@ -143,6 +163,12 @@ class FeatureExtractor {
         // Click/glitch detection
         let (clickRate, clickIntensity) = detectClicks(audioData: analysisData, sampleRate: sampleRate)
         
+        // Concatenative synthesis features
+        let spectralEmbedding = computeSpectralEmbedding(audioData: analysisData)
+        let onsetPositions = detectOnsetPositions(audioData: analysisData)
+        let startSpectrum = computeSpectralProfile(audioData: analysisData, atStart: true)
+        let endSpectrum = computeSpectralProfile(audioData: analysisData, atStart: false)
+        
         return AudioFeatures(
             tempo: tempo,
             key: key,
@@ -155,7 +181,11 @@ class FeatureExtractor {
             harmonicToNoiseRatio: harmonicToNoiseRatio,
             onsetRegularity: onsetRegularity,
             clickRate: clickRate,
-            clickIntensity: clickIntensity
+            clickIntensity: clickIntensity,
+            spectralEmbedding: spectralEmbedding,
+            onsetPositions: onsetPositions,
+            startSpectrum: startSpectrum,
+            endSpectrum: endSpectrum
         )
     }
     
@@ -853,6 +883,186 @@ class FeatureExtractor {
         let clickIntensity = clickCount > 0 ? Double(totalIntensity) / Double(clickCount) : 0.0
         
         return (clickRate, clickIntensity)
+    }
+    
+    // MARK: - Concatenative Synthesis Features
+    
+    /// Computes a 64-dimensional spectral embedding (average mel-spectrogram)
+    /// Used for similarity matching between segments
+    private func computeSpectralEmbedding(audioData: [Float]) -> [Float] {
+        let numMelBins = 64
+        guard audioData.count >= fftSize else {
+            return [Float](repeating: 0, count: numMelBins)
+        }
+        
+        // Mel filter bank frequencies (simplified)
+        let minFreq: Float = 80.0
+        let maxFreq: Float = Float(sampleRate / 2.0)
+        
+        // Compute FFT for multiple frames and average
+        var melAccumulator = [Float](repeating: 0, count: numMelBins)
+        var frameCount = 0
+        
+        let numFrames = (audioData.count - fftSize) / hopSize + 1
+        let maxFrames = min(numFrames, 100) // Limit to 100 frames for efficiency
+        let frameStep = max(1, numFrames / maxFrames)
+        
+        for frameIdx in stride(from: 0, to: numFrames, by: frameStep) {
+            let startIdx = frameIdx * hopSize
+            guard startIdx + fftSize <= audioData.count else { break }
+            
+            // Extract frame and apply window
+            var frame = [Float](repeating: 0, count: fftSize)
+            for i in 0..<fftSize {
+                let window = 0.5 - 0.5 * cos(2.0 * Float.pi * Float(i) / Float(fftSize - 1))
+                frame[i] = audioData[startIdx + i] * window
+            }
+            
+            // FFT
+            var realPart = frame
+            var imagPart = [Float](repeating: 0, count: fftSize)
+            var splitComplex = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
+            
+            let log2n = vDSP_Length(log2(Float(fftSize)))
+            guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else { continue }
+            defer { vDSP_destroy_fftsetup(fftSetup) }
+            
+            vDSP_fft_zip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+            
+            // Compute magnitude spectrum
+            var magnitudes = [Float](repeating: 0, count: fftSize / 2)
+            vDSP_zvabs(&splitComplex, 1, &magnitudes, 1, vDSP_Length(fftSize / 2))
+            
+            // Convert to mel scale (simplified linear mapping)
+            for melBin in 0..<numMelBins {
+                let melFrac = Float(melBin) / Float(numMelBins - 1)
+                let melFreq = minFreq * pow(maxFreq / minFreq, melFrac)
+                let fftBin = Int(melFreq * Float(fftSize) / Float(sampleRate))
+                
+                if fftBin < magnitudes.count {
+                    // Average nearby bins for smoother representation
+                    let binStart = max(0, fftBin - 1)
+                    let binEnd = min(magnitudes.count - 1, fftBin + 1)
+                    var sum: Float = 0
+                    for b in binStart...binEnd {
+                        sum += magnitudes[b]
+                    }
+                    melAccumulator[melBin] += sum / Float(binEnd - binStart + 1)
+                }
+            }
+            frameCount += 1
+        }
+        
+        // Average and convert to log scale
+        if frameCount > 0 {
+            for i in 0..<numMelBins {
+                melAccumulator[i] = log10(max(1e-10, melAccumulator[i] / Float(frameCount)))
+            }
+        }
+        
+        // Normalize to 0-1 range
+        let minVal = melAccumulator.min() ?? 0
+        let maxVal = melAccumulator.max() ?? 1
+        let range = maxVal - minVal
+        if range > 0 {
+            for i in 0..<numMelBins {
+                melAccumulator[i] = (melAccumulator[i] - minVal) / range
+            }
+        }
+        
+        return melAccumulator
+    }
+    
+    /// Detects onset positions within the audio (in seconds)
+    /// Used for beat-aligned crossfading
+    private func detectOnsetPositions(audioData: [Float]) -> [Double] {
+        let onsetEnvelope = calculateOnsetStrength(audioData: audioData)
+        guard onsetEnvelope.count > 10 else { return [] }
+        
+        // Find peaks in onset envelope
+        var peaks: [Double] = []
+        let threshold = calculateAdaptiveThreshold(onsetEnvelope)
+        
+        for i in 1..<(onsetEnvelope.count - 1) {
+            if onsetEnvelope[i] > onsetEnvelope[i-1] &&
+               onsetEnvelope[i] > onsetEnvelope[i+1] &&
+               onsetEnvelope[i] > threshold {
+                // Convert frame index to time
+                let timeSeconds = Double(i * hopSize) / sampleRate
+                peaks.append(timeSeconds)
+            }
+        }
+        
+        return peaks
+    }
+    
+    /// Computes spectral profile at start or end of audio
+    /// Used for finding compatible segments for crossfading
+    private func computeSpectralProfile(audioData: [Float], atStart: Bool) -> [Float] {
+        let profileSize = 32 // Number of frequency bins for profile
+        let windowDuration = 0.1 // 100ms window
+        let windowSamples = min(Int(windowDuration * sampleRate), audioData.count)
+        
+        guard windowSamples >= fftSize else {
+            return [Float](repeating: 0, count: profileSize)
+        }
+        
+        // Extract window at start or end
+        let startIdx: Int
+        if atStart {
+            startIdx = 0
+        } else {
+            startIdx = max(0, audioData.count - windowSamples)
+        }
+        
+        // Apply window and compute FFT
+        var frame = [Float](repeating: 0, count: fftSize)
+        for i in 0..<min(fftSize, windowSamples) {
+            let window = 0.5 - 0.5 * cos(2.0 * Float.pi * Float(i) / Float(fftSize - 1))
+            frame[i] = audioData[startIdx + i] * window
+        }
+        
+        var realPart = frame
+        var imagPart = [Float](repeating: 0, count: fftSize)
+        var splitComplex = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
+        
+        let log2n = vDSP_Length(log2(Float(fftSize)))
+        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
+            return [Float](repeating: 0, count: profileSize)
+        }
+        defer { vDSP_destroy_fftsetup(fftSetup) }
+        
+        vDSP_fft_zip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+        
+        // Compute magnitude spectrum
+        var magnitudes = [Float](repeating: 0, count: fftSize / 2)
+        vDSP_zvabs(&splitComplex, 1, &magnitudes, 1, vDSP_Length(fftSize / 2))
+        
+        // Downsample to profile size
+        var profile = [Float](repeating: 0, count: profileSize)
+        let binsPerBucket = magnitudes.count / profileSize
+        
+        for bucket in 0..<profileSize {
+            var sum: Float = 0
+            let start = bucket * binsPerBucket
+            let end = min(start + binsPerBucket, magnitudes.count)
+            for i in start..<end {
+                sum += magnitudes[i]
+            }
+            profile[bucket] = log10(max(1e-10, sum / Float(binsPerBucket)))
+        }
+        
+        // Normalize
+        let minVal = profile.min() ?? 0
+        let maxVal = profile.max() ?? 1
+        let range = maxVal - minVal
+        if range > 0 {
+            for i in 0..<profileSize {
+                profile[i] = (profile[i] - minVal) / range
+            }
+        }
+        
+        return profile
     }
     
     enum FeatureExtractorError: LocalizedError {

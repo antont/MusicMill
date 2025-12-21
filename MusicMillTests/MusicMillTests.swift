@@ -667,4 +667,192 @@ struct MusicMillTests {
         try? report.write(to: reportURL, atomically: true, encoding: .utf8)
         print("Quality report written to: \(reportURL.path)")
     }
+    
+    // MARK: - Concatenative Synthesis Tests
+    
+    @Test @MainActor func testConcatenativeSynthesis() async throws {
+        print(String(repeating: "=", count: 60))
+        print("TESTING CONCATENATIVE SYNTHESIS")
+        print(String(repeating: "=", count: 60))
+        
+        // Find analysis segments
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
+        
+        guard FileManager.default.fileExists(atPath: analysisDir.path) else {
+            throw TestError.directoryNotFound("No analysis directory")
+        }
+        
+        // Find segment files
+        var segmentURLs: [URL] = []
+        let contents = try FileManager.default.contentsOfDirectory(at: analysisDir, includingPropertiesForKeys: nil)
+        for dir in contents where dir.hasDirectoryPath {
+            let segmentsDir = dir.appendingPathComponent("Segments")
+            if FileManager.default.fileExists(atPath: segmentsDir.path) {
+                let segments = try FileManager.default.contentsOfDirectory(at: segmentsDir, includingPropertiesForKeys: nil)
+                    .filter { $0.pathExtension == "m4a" }
+                segmentURLs.append(contentsOf: segments)
+            }
+        }
+        
+        guard segmentURLs.count >= 2 else {
+            throw TestError.directoryNotFound("Need at least 2 segments for concatenative synthesis")
+        }
+        
+        print("[1] Found \(segmentURLs.count) segments")
+        
+        // Create concatenative synthesizer
+        print("\n[2] Creating concatenative synthesizer...")
+        let synthesizer = ConcatenativeSynthesizer()
+        
+        // Load segments (use first 5 for testing)
+        for (index, url) in segmentURLs.prefix(5).enumerated() {
+            do {
+                try await synthesizer.loadSegment(from: url, identifier: "seg_\(index)", style: "darkwave")
+                print("  Loaded: \(url.lastPathComponent)")
+            } catch {
+                print("  Failed to load \(url.lastPathComponent): \(error)")
+            }
+        }
+        
+        let segmentCount = synthesizer.getSegmentCount()
+        #expect(segmentCount >= 2, "Should load at least 2 segments")
+        print("  Total segments loaded: \(segmentCount)")
+        
+        // Output file path
+        let outputDir = documentsURL.appendingPathComponent("MusicMill")
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let outputURL = outputDir.appendingPathComponent("concatenative_output.wav")
+        try? FileManager.default.removeItem(at: outputURL)
+        
+        // Configure synthesis
+        var params = ConcatenativeSynthesizer.Parameters()
+        params.crossfadeDuration = 0.5 // 500ms crossfade
+        params.masterVolume = 1.0
+        synthesizer.setParameters(params)
+        
+        // Set up audio capture
+        let engine = synthesizer.getAudioEngine()
+        let mainMixer = engine.mainMixerNode
+        let format = mainMixer.outputFormat(forBus: 0)
+        
+        var capturedBuffers: [AVAudioPCMBuffer] = []
+        let captureFrameCount: AVAudioFrameCount = 4096
+        
+        mainMixer.installTap(onBus: 0, bufferSize: captureFrameCount, format: format) { buffer, _ in
+            if let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) {
+                copy.frameLength = buffer.frameLength
+                if let srcData = buffer.floatChannelData, let dstData = copy.floatChannelData {
+                    for channel in 0..<Int(buffer.format.channelCount) {
+                        memcpy(dstData[channel], srcData[channel], Int(buffer.frameLength) * MemoryLayout<Float>.size)
+                    }
+                }
+                capturedBuffers.append(copy)
+            }
+        }
+        
+        // Start synthesis
+        print("\n[3] Running concatenative synthesis for 20 seconds...")
+        try synthesizer.start()
+        
+        try await Task.sleep(nanoseconds: 20_000_000_000) // 20 seconds
+        
+        synthesizer.stop()
+        mainMixer.removeTap(onBus: 0)
+        
+        print("  Captured \(capturedBuffers.count) buffers")
+        
+        // Combine captured buffers
+        let totalFrames = capturedBuffers.reduce(0) { $0 + Int($1.frameLength) }
+        guard let combinedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(totalFrames)) else {
+            throw TestError.noAudioOutput
+        }
+        
+        var writePosition: AVAudioFramePosition = 0
+        for buffer in capturedBuffers {
+            if let srcData = buffer.floatChannelData, let dstData = combinedBuffer.floatChannelData {
+                for channel in 0..<Int(format.channelCount) {
+                    memcpy(dstData[channel].advanced(by: Int(writePosition)),
+                           srcData[channel],
+                           Int(buffer.frameLength) * MemoryLayout<Float>.size)
+                }
+            }
+            writePosition += AVAudioFramePosition(buffer.frameLength)
+        }
+        combinedBuffer.frameLength = AVAudioFrameCount(totalFrames)
+        
+        // Check for actual audio content
+        var hasAudio = false
+        if let channelData = combinedBuffer.floatChannelData {
+            for i in 0..<Int(combinedBuffer.frameLength) {
+                if abs(channelData[0][i]) > 0.001 {
+                    hasAudio = true
+                    break
+                }
+            }
+        }
+        
+        #expect(hasAudio, "Concatenative synthesis should produce audible output")
+        print("  ✓ Audio output verified")
+        
+        // Save to file
+        print("\n[4] Saving output to file...")
+        let outputFile = try AVAudioFile(forWriting: outputURL, settings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: format.channelCount,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false
+        ])
+        try outputFile.write(from: combinedBuffer)
+        print("  Saved to: \(outputURL.path)")
+        
+        // Analyze output quality
+        print("\n[5] Analyzing output quality...")
+        let featureExtractor = FeatureExtractor()
+        let outputFeatures = featureExtractor.extractFeatures(from: combinedBuffer)
+        
+        print("  Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")")
+        print("  Key: \(outputFeatures.key ?? "nil")")
+        print("  Energy: \(String(format: "%.4f", outputFeatures.energy))")
+        print("  Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))")
+        print("  Duration: \(String(format: "%.2f sec", outputFeatures.duration))")
+        
+        // Report
+        let reportURL = outputDir.appendingPathComponent("concatenative_report.txt")
+        var report = """
+        ============================================================
+        CONCATENATIVE SYNTHESIS REPORT
+        Generated: \(Date())
+        ============================================================
+        
+        CONFIGURATION
+        -------------
+        Segments Loaded: \(segmentCount)
+        Crossfade Duration: \(params.crossfadeDuration)s
+        
+        OUTPUT AUDIO
+        ------------
+        Captured Frames: \(totalFrames) (\(String(format: "%.2f sec", Double(totalFrames) / format.sampleRate)))
+        Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")
+        Key: \(outputFeatures.key ?? "nil")
+        Energy: \(String(format: "%.4f", outputFeatures.energy))
+        Spectral Centroid: \(String(format: "%.1f Hz", outputFeatures.spectralCentroid))
+        Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))
+        
+        COMPARISON TO GRANULAR
+        ----------------------
+        Concatenative synthesis uses full phrases (2-8 sec) instead of tiny grains.
+        This should result in:
+        - Lower click rate (smoother transitions)
+        - More musical continuity
+        - Preserved original textures
+        
+        ============================================================
+        """
+        
+        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
+        print("\nReport written to: \(reportURL.path)")
+        print("\n✓ Concatenative synthesis test complete!")
+    }
 }
