@@ -24,13 +24,15 @@ source "$VENV_PATH/bin/activate"
 # Upgrade pip
 pip install --upgrade pip
 
-# Install RAVE
+# Install RAVE with compatible scipy version
 echo "Installing RAVE (acids-rave)..."
+# Pin scipy < 1.12 due to kaiser function removal
+pip install "scipy<1.12"
 pip install acids-rave
 
 # Install additional dependencies for export
 echo "Installing Core ML tools..."
-pip install coremltools torch
+pip install coremltools
 
 echo ""
 echo "✓ RAVE environment setup complete!"
