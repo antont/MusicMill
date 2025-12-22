@@ -505,20 +505,26 @@ class RAVESynthesizer {
         
         print("RAVESynthesizer: Enabling mic input, format: \(inputFormat)")
         
-        do {
-            // Install tap on input
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-                self?.processMicInput(buffer: buffer)
+        // Make sure audio engine is running (required for input tap)
+        if !audioEngine.isRunning {
+            do {
+                try audioEngine.start()
+                print("RAVESynthesizer: Audio engine started for mic input")
+            } catch {
+                print("RAVESynthesizer: Failed to start audio engine: \(error)")
+                throw MicError.setupFailed("Could not start audio engine: \(error.localizedDescription)")
             }
-            
-            micInputEnabled = true
-            startMicProcessingLoop()
-            
-            print("RAVESynthesizer: Mic input enabled successfully")
-        } catch {
-            print("RAVESynthesizer: Failed to install tap: \(error)")
-            throw MicError.setupFailed(error.localizedDescription)
         }
+        
+        // Install tap on input
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            self?.processMicInput(buffer: buffer)
+        }
+        
+        micInputEnabled = true
+        startMicProcessingLoop()
+        
+        print("RAVESynthesizer: Mic input enabled successfully")
     }
     
     /// Disables microphone input
