@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AVFAudio
 
 /// RAVE (Realtime Audio Variational autoEncoder) synthesizer
 /// Uses Python bridge for neural audio generation via PyTorch MPS
@@ -423,6 +424,56 @@ class RAVESynthesizer {
     
     // MARK: - Microphone Input (Voice Control)
     
+    enum MicError: LocalizedError {
+        case permissionDenied
+        case noInputDevice
+        case setupFailed(String)
+        
+        var errorDescription: String? {
+            switch self {
+            case .permissionDenied:
+                return "Microphone permission denied. Please allow in System Settings > Privacy & Security > Microphone."
+            case .noInputDevice:
+                return "No audio input device found."
+            case .setupFailed(let msg):
+                return "Microphone setup failed: \(msg)"
+            }
+        }
+    }
+    
+    /// Requests microphone permission and enables input
+    func enableMicInputAsync() async throws {
+        // Request microphone permission
+        #if os(macOS)
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        print("RAVESynthesizer: Current mic permission status: \(status.rawValue)")
+        
+        switch status {
+        case .authorized:
+            print("RAVESynthesizer: Mic already authorized")
+            try enableMicInput()
+        case .notDetermined:
+            print("RAVESynthesizer: Requesting mic permission...")
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            if granted {
+                print("RAVESynthesizer: Mic permission granted")
+                try enableMicInput()
+            } else {
+                print("RAVESynthesizer: Mic permission denied by user")
+                throw MicError.permissionDenied
+            }
+        case .denied, .restricted:
+            print("RAVESynthesizer: Mic permission denied/restricted")
+            throw MicError.permissionDenied
+        @unknown default:
+            print("RAVESynthesizer: Unknown permission status")
+            throw MicError.permissionDenied
+        }
+        #else
+        try enableMicInput()
+        #endif
+    }
+    
     /// Enables microphone input for style transfer
     /// Voice/humming will be transformed through RAVE's learned timbre
     func enableMicInput() throws {
@@ -430,20 +481,41 @@ class RAVESynthesizer {
             throw RAVEError.bridgeNotStarted
         }
         
+        // Check if we have an input device
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         
-        print("RAVESynthesizer: Enabling mic input, format: \(inputFormat)")
+        print("RAVESynthesizer: Input format: \(inputFormat)")
+        print("RAVESynthesizer: Input channels: \(inputFormat.channelCount)")
+        print("RAVESynthesizer: Input sample rate: \(inputFormat.sampleRate)")
         
-        // Install tap on input
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            self?.processMicInput(buffer: buffer)
+        // Check if format is valid (0 channels means no input device)
+        guard inputFormat.channelCount > 0 else {
+            print("RAVESynthesizer: No input channels available!")
+            throw MicError.noInputDevice
         }
         
-        micInputEnabled = true
-        startMicProcessingLoop()
+        guard inputFormat.sampleRate > 0 else {
+            print("RAVESynthesizer: Invalid sample rate!")
+            throw MicError.noInputDevice
+        }
         
-        print("RAVESynthesizer: Mic input enabled")
+        print("RAVESynthesizer: Enabling mic input, format: \(inputFormat)")
+        
+        do {
+            // Install tap on input
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+                self?.processMicInput(buffer: buffer)
+            }
+            
+            micInputEnabled = true
+            startMicProcessingLoop()
+            
+            print("RAVESynthesizer: Mic input enabled successfully")
+        } catch {
+            print("RAVESynthesizer: Failed to install tap: \(error)")
+            throw MicError.setupFailed(error.localizedDescription)
+        }
     }
     
     /// Disables microphone input

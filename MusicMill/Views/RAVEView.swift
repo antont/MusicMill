@@ -741,21 +741,27 @@ class RAVEViewController: ObservableObject {
         }
         
         if enabled {
-            do {
-                try synth.enableMicInput()
-                micEnabled = true
-                statusText = "Voice Input Active"
-                
-                // Start playback if not already playing
-                if !isPlaying {
-                    play()
+            Task {
+                do {
+                    try await synth.enableMicInputAsync()
+                    await MainActor.run {
+                        micEnabled = true
+                        statusText = "Voice Input Active"
+                        
+                        // Start playback if not already playing
+                        if !isPlaying {
+                            play()
+                        }
+                        
+                        // Start level monitoring
+                        startMicLevelMonitor()
+                    }
+                } catch {
+                    await MainActor.run {
+                        micEnabled = false
+                        statusText = "Mic error: \(error.localizedDescription)"
+                    }
                 }
-                
-                // Start level monitoring
-                startMicLevelMonitor()
-            } catch {
-                micEnabled = false
-                statusText = "Mic error: \(error.localizedDescription)"
             }
         } else {
             synth.disableMicInput()
