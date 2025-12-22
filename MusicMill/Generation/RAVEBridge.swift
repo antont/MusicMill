@@ -622,6 +622,89 @@ class RAVEBridge {
         _ = try receiveJSON([String: String].self)  // {"status": "ok"}
     }
     
+    // MARK: - Model Info
+    
+    /// Model info response structure
+    struct ModelInfo: Codable {
+        let latentDim: Int
+        let sampleRate: Int
+        let samplesPerFrame: Int
+        let framesPerSecond: Double
+        let styles: [String]
+        
+        enum CodingKeys: String, CodingKey {
+            case latentDim = "latent_dim"
+            case sampleRate = "sample_rate"
+            case samplesPerFrame = "samples_per_frame"
+            case framesPerSecond = "frames_per_second"
+            case styles
+        }
+    }
+    
+    /// Fetches model information from the server
+    func getModelInfo() async throws -> ModelInfo {
+        guard case .running = status else {
+            throw BridgeError.serverNotRunning
+        }
+        
+        try connect()
+        
+        let request = ["command": "get_model_info"]
+        try sendRequest(request)
+        
+        return try receiveJSON(ModelInfo.self)
+    }
+    
+    // MARK: - Dimension Control
+    
+    /// Sets individual latent dimensions directly
+    func setDimensions(_ dimensions: [Float]) async throws {
+        guard case .running = status else {
+            throw BridgeError.serverNotRunning
+        }
+        
+        try connect()
+        
+        struct SetDimensionsRequest: Encodable {
+            let command = "set_dimensions"
+            let dimensions: [Float]
+        }
+        
+        let request = SetDimensionsRequest(dimensions: dimensions)
+        try sendRequest(request)
+        _ = try receiveJSON([String: String].self)
+    }
+    
+    // MARK: - LFO Control
+    
+    /// Configures LFO modulation
+    func setLFO(enabled: Bool, waveform: String, rate: Float, depth: Float, target: String) async throws {
+        guard case .running = status else {
+            throw BridgeError.serverNotRunning
+        }
+        
+        try connect()
+        
+        struct SetLFORequest: Encodable {
+            let command = "set_lfo"
+            let enabled: Bool
+            let waveform: String
+            let rate: Float
+            let depth: Float
+            let target: String
+        }
+        
+        let request = SetLFORequest(
+            enabled: enabled,
+            waveform: waveform,
+            rate: rate,
+            depth: depth,
+            target: target
+        )
+        try sendRequest(request)
+        _ = try receiveJSON([String: String].self)
+    }
+    
     // MARK: - Audio Buffer Management
     
     /// Fills the audio buffer with generated samples

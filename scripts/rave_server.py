@@ -63,6 +63,14 @@ class RAVEController:
         self.time_phase = 0.0  # Accumulated time for continuity
         self.variation_amount = 0.5  # How much random variation to add
         
+        # LFO modulation state
+        self.lfo_enabled = False
+        self.lfo_waveform = 'sine'
+        self.lfo_rate = 0.5  # Hz
+        self.lfo_depth = 0.3  # 0-1
+        self.lfo_target = 'energy'
+        self.lfo_phase = 0.0
+        
         # Lock for thread-safe access
         self.lock = Lock()
         
@@ -182,10 +190,7 @@ class RAVEController:
     
     def generate_chunk(self, num_frames: int = 50, tempo_factor: float = 1.0) -> np.ndarray:
         """
-        Generate audio chunk with current controls.
-        
-        SIMPLE APPROACH: Just use random latent like direct generation.
-        This creates varied, interesting audio without repetition.
+        Generate audio chunk with current controls and optional LFO modulation.
         
         Args:
             num_frames: Number of latent frames to generate
@@ -194,17 +199,59 @@ class RAVEController:
         Returns:
             Audio samples as numpy array
         """
-        # SIMPLE: Just generate random latent for each frame
-        # This is EXACTLY what direct generation does, and it sounds good!
+        # Generate random latent for each frame (creates variety)
         z = torch.randn(1, self.latent_dim, num_frames, device=self.device)
         
-        # That's it! Random latent -> decode -> audio
-        # The RAVE model handles making it sound musical
+        # Apply LFO modulation if enabled
+        with self.lock:
+            if self.lfo_enabled:
+                # Calculate LFO values for each frame
+                frame_duration = self.samples_per_frame / self.sample_rate
+                t = torch.linspace(
+                    self.lfo_phase, 
+                    self.lfo_phase + num_frames * frame_duration * self.lfo_rate * 2 * np.pi,
+                    num_frames,
+                    device=self.device
+                )
+                
+                # Generate LFO waveform
+                if self.lfo_waveform == 'sine':
+                    lfo = torch.sin(t)
+                elif self.lfo_waveform == 'triangle':
+                    lfo = 2 * torch.abs(t / np.pi - torch.floor(t / np.pi + 0.5)) - 1
+                elif self.lfo_waveform == 'square':
+                    lfo = torch.sign(torch.sin(t))
+                elif self.lfo_waveform == 'random':
+                    lfo = torch.randn(num_frames, device=self.device)
+                else:
+                    lfo = torch.sin(t)
+                
+                # Scale by depth
+                lfo = lfo * self.lfo_depth
+                
+                # Apply to target
+                if self.lfo_target == 'energy':
+                    # Modulate overall magnitude
+                    modulation = 1.0 + lfo.unsqueeze(0).unsqueeze(0)
+                    z = z * modulation
+                elif self.lfo_target == 'variation':
+                    # Add extra variation
+                    noise = torch.randn_like(z) * lfo.unsqueeze(0).unsqueeze(0).abs()
+                    z = z + noise
+                elif self.lfo_target.isdigit():
+                    # Modulate specific dimension
+                    dim_idx = int(self.lfo_target)
+                    if dim_idx < self.latent_dim:
+                        z[0, dim_idx, :] += lfo
+                
+                # Update phase for continuity
+                self.lfo_phase = t[-1].item()
         
         # Apply tempo by interpolating along time axis
         if tempo_factor != 1.0:
             target_frames = int(num_frames / tempo_factor)
-            z = F.interpolate(z, size=target_frames, mode='linear', align_corners=False)
+            if target_frames > 0:
+                z = F.interpolate(z, size=target_frames, mode='linear', align_corners=False)
         
         # Decode
         with torch.no_grad():
@@ -222,6 +269,48 @@ class RAVEController:
     def get_styles(self) -> list:
         """Get list of available style names."""
         return list(self.anchors.keys())
+    
+    def set_dimensions(self, dimensions: list):
+        """
+        Set individual latent dimensions directly.
+        
+        Args:
+            dimensions: List of dimension values (length should match latent_dim)
+        """
+        with self.lock:
+            if len(dimensions) >= self.latent_dim:
+                self.target_latent = torch.tensor(
+                    dimensions[:self.latent_dim], 
+                    device=self.device, 
+                    dtype=torch.float32
+                )
+            else:
+                # Partial update - fill missing with current values
+                new_latent = self.target_latent.clone()
+                for i, val in enumerate(dimensions):
+                    if i < self.latent_dim:
+                        new_latent[i] = val
+                self.target_latent = new_latent
+    
+    def set_lfo(self, enabled: bool = False, waveform: str = 'sine', 
+                rate: float = 0.5, depth: float = 0.3, target: str = 'energy'):
+        """
+        Configure LFO modulation.
+        
+        Args:
+            enabled: Whether LFO is active
+            waveform: 'sine', 'triangle', 'square', or 'random'
+            rate: Frequency in Hz
+            depth: Modulation depth 0-1
+            target: 'energy', 'variation', or dimension index
+        """
+        with self.lock:
+            self.lfo_enabled = enabled
+            self.lfo_waveform = waveform
+            self.lfo_rate = rate
+            self.lfo_depth = depth
+            self.lfo_target = target
+            self.lfo_phase = 0.0
 
 
 def run_server(controller: RAVEController, socket_path: str = SOCKET_PATH):
@@ -333,12 +422,39 @@ def process_request(request: dict, controller: RAVEController):
     if command == 'get_styles':
         return {'styles': controller.get_styles()}
     
+    elif command == 'get_model_info':
+        # Return model information for UI
+        return {
+            'latent_dim': controller.latent_dim,
+            'sample_rate': controller.sample_rate,
+            'samples_per_frame': controller.samples_per_frame,
+            'frames_per_second': controller.sample_rate / controller.samples_per_frame,
+            'styles': controller.get_styles()
+        }
+    
     elif command == 'set_controls':
         controller.set_controls(
             style_blend=request.get('style_blend'),
             energy=request.get('energy', 0.5),
             tempo_factor=request.get('tempo_factor', 1.0),
             variation=request.get('variation', 0.5)
+        )
+        return {'status': 'ok'}
+    
+    elif command == 'set_dimensions':
+        # Direct dimension control
+        dimensions = request.get('dimensions', [])
+        controller.set_dimensions(dimensions)
+        return {'status': 'ok'}
+    
+    elif command == 'set_lfo':
+        # Configure LFO modulation
+        controller.set_lfo(
+            enabled=request.get('enabled', False),
+            waveform=request.get('waveform', 'sine'),
+            rate=request.get('rate', 0.5),
+            depth=request.get('depth', 0.3),
+            target=request.get('target', 'energy')
         )
         return {'status': 'ok'}
     

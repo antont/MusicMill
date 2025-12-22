@@ -17,6 +17,12 @@ struct ContentView: View {
                     Label("Performance", systemImage: "music.note")
                 }
                 .tag(1)
+            
+            RAVEView()
+                .tabItem {
+                    Label("RAVE", systemImage: "waveform")
+                }
+                .tag(2)
         }
         .frame(minWidth: 1200, minHeight: 800)
     }

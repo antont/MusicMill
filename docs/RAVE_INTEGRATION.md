@@ -203,6 +203,68 @@ Listen to these to understand control effects:
 | `control_demo_4_fast_tempo.wav` | Fast tempo (2.0x) |
 | `control_demo_5_smooth_evolution.wav` | Structured LFO patterns |
 
+## UI Controls
+
+The RAVE tab in MusicMill provides comprehensive control over neural synthesis:
+
+### Macro Controls
+
+| Control | Description | Implementation |
+|---------|-------------|----------------|
+| **Energy** | Overall intensity/dynamics | Scales latent magnitude |
+| **Texture** | Tonal character variation | Maps to variation amount |
+| **Chaos** | Randomness/unpredictability | Adds random noise to latent |
+
+### Tempo
+
+BPM slider (40-200) controls playback speed via latent time-axis interpolation.
+
+### Latent Dimensions
+
+Direct control over individual latent dimensions (4 for percussion, 16 for vintage):
+- Each dimension affects different timbral qualities
+- Experiment to discover interesting combinations
+- Reset/Randomize buttons for exploration
+
+### Modulation (LFO)
+
+Built-in LFO for automated parameter sweeps:
+- Waveforms: Sine, Triangle, Square, Random
+- Rate: 0.1 - 10 Hz
+- Target: Energy, Texture, Chaos, or specific dimension
+- Depth: 0 - 100%
+
+### Presets
+
+Quick presets for common settings:
+- **Calm**: Low energy, minimal chaos
+- **Balanced**: Neutral settings
+- **Intense**: High energy, moderate chaos
+- **Chaotic**: Maximum randomness
+
+## Future Work
+
+### Style-to-Parameter Mapping
+
+After analyzing DJ sets, we can correlate audio features with RAVE latent dimensions:
+
+1. **Extract features** from source tracks (spectral centroid, energy envelope, rhythm patterns)
+2. **Train mapping** from features to latent dimensions that produce similar output
+3. **Create style presets** that automatically configure RAVE for a genre
+4. **"Match this track"** feature: encode reference, use as style anchor
+
+This would enable:
+- Selecting a style from your collection
+- RAVE automatically producing similar-sounding output
+- Smooth interpolation between styles during performance
+
+### Additional Enhancements
+
+- **MIDI control**: Map MIDI CC to latent dimensions for hardware control
+- **Audio reactive**: Use input audio features to modulate parameters
+- **Pattern memory**: Save and recall interesting latent configurations
+- **Multi-model blending**: Mix output from multiple RAVE models
+
 ## References
 
 - [RAVE Paper](https://arxiv.org/abs/2111.05011) - Original research
