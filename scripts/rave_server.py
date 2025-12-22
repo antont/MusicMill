@@ -315,6 +315,42 @@ class RAVEController:
             self.lfo_depth = depth
             self.lfo_target = target
             self.lfo_phase = 0.0
+    
+    def style_transfer(self, audio_input: np.ndarray) -> np.ndarray:
+        """
+        Style transfer: encode input audio and decode through model.
+        
+        This is the key function for voice-controlled synthesis:
+        - Your voice/humming provides the timing and dynamics
+        - RAVE transforms it to the model's learned timbre (drums, synths, etc.)
+        
+        Args:
+            audio_input: Input audio as numpy float32 array (mono, 48kHz expected)
+        
+        Returns:
+            Transformed audio as numpy float32 array
+        """
+        # Convert to tensor
+        audio_tensor = torch.tensor(audio_input, dtype=torch.float32, device=self.device)
+        
+        # Add batch and channel dimensions if needed: [samples] -> [1, 1, samples]
+        if audio_tensor.dim() == 1:
+            audio_tensor = audio_tensor.unsqueeze(0).unsqueeze(0)
+        elif audio_tensor.dim() == 2:
+            audio_tensor = audio_tensor.unsqueeze(0)
+        
+        with torch.no_grad():
+            # Use forward() which does encode + decode
+            output = self.model.forward(audio_tensor)
+        
+        # Convert back to numpy
+        output_np = output.cpu().numpy().squeeze()
+        
+        # Handle stereo output (mix to mono)
+        if len(output_np.shape) == 2:
+            output_np = output_np.mean(axis=0)
+        
+        return output_np.astype(np.float32)
 
 
 def run_server(controller: RAVEController, socket_path: str = SOCKET_PATH):
@@ -478,6 +514,23 @@ def process_request(request: dict, controller: RAVEController):
         
         audio = controller.generate_chunk(frames, tempo)
         return audio
+    
+    elif command == 'style_transfer':
+        # Style transfer: encode input audio, decode through model
+        # Input audio is sent as base64-encoded float32 array
+        import base64
+        
+        audio_b64 = request.get('audio')
+        if not audio_b64:
+            return {'error': 'No audio data provided'}
+        
+        # Decode base64 to float32 array
+        audio_bytes = base64.b64decode(audio_b64)
+        audio_np = np.frombuffer(audio_bytes, dtype=np.float32)
+        
+        # Process through RAVE (encode -> decode)
+        output = controller.style_transfer(audio_np)
+        return output
     
     else:
         return {'error': f'Unknown command: {command}'}

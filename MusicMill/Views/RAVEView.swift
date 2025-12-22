@@ -34,6 +34,11 @@ struct RAVEView: View {
                 
                 Divider()
                 
+                // Voice input
+                micInputSection
+                
+                Divider()
+                
                 // Playback controls
                 playbackSection
                 
@@ -371,6 +376,69 @@ struct RAVEView: View {
         }
     }
     
+    // MARK: - Microphone Input Section
+    
+    private var micInputSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Voice Input")
+                    .font(.headline)
+                
+                Spacer()
+                
+                // Mic toggle
+                Toggle("", isOn: $controller.micEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: controller.micEnabled) { _, enabled in
+                        controller.toggleMicInput(enabled: enabled)
+                    }
+            }
+            
+            HStack(spacing: 20) {
+                // Mic icon and status
+                HStack(spacing: 8) {
+                    Image(systemName: controller.micEnabled ? "mic.fill" : "mic.slash")
+                        .font(.title2)
+                        .foregroundColor(controller.micEnabled ? .red : .secondary)
+                    
+                    Text(controller.micEnabled ? "Listening..." : "Off")
+                        .foregroundColor(.secondary)
+                }
+                
+                // Level meter
+                if controller.micEnabled {
+                    HStack(spacing: 4) {
+                        Text("Level:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.secondary.opacity(0.2))
+                                
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(controller.micLevel > 0.8 ? Color.red : Color.green)
+                                    .frame(width: geometry.size.width * CGFloat(controller.micLevel))
+                            }
+                        }
+                        .frame(width: 100, height: 8)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .background(Color.secondary.opacity(0.05))
+            .cornerRadius(8)
+            
+            Text("Hum, beatbox, or sing to control RAVE. Your voice timing and dynamics drive the output.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
     // MARK: - Playback Section
     
     private var playbackSection: some View {
@@ -494,6 +562,10 @@ class RAVEViewController: ObservableObject {
     @Published var lfoType: LFOType = .off
     @Published var lfoRate: Double = 0.5
     @Published var lfoTarget: LFOTarget = .energy
+    
+    // Microphone input
+    @Published var micEnabled: Bool = false
+    @Published var micLevel: Double = 0
     @Published var lfoDepth: Double = 0.3
     
     // Internal
@@ -653,6 +725,61 @@ class RAVEViewController: ObservableObject {
         isPlaying = false
         statusText = isServerRunning ? "Running" : "Stopped"
         stopLFOTimer()
+        
+        // Also disable mic if it was on
+        if micEnabled {
+            toggleMicInput(enabled: false)
+        }
+    }
+    
+    // MARK: - Microphone Input
+    
+    func toggleMicInput(enabled: Bool) {
+        guard let synth = synthesizer else {
+            micEnabled = false
+            return
+        }
+        
+        if enabled {
+            do {
+                try synth.enableMicInput()
+                micEnabled = true
+                statusText = "Voice Input Active"
+                
+                // Start playback if not already playing
+                if !isPlaying {
+                    play()
+                }
+                
+                // Start level monitoring
+                startMicLevelMonitor()
+            } catch {
+                micEnabled = false
+                statusText = "Mic error: \(error.localizedDescription)"
+            }
+        } else {
+            synth.disableMicInput()
+            micEnabled = false
+            micLevel = 0
+            if isServerRunning {
+                statusText = isPlaying ? "Playing" : "Running"
+            }
+        }
+    }
+    
+    private var micLevelTimer: Timer?
+    
+    private func startMicLevelMonitor() {
+        micLevelTimer?.invalidate()
+        micLevelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, let synth = self.synthesizer else { return }
+                // Get mic level from synthesizer (0-1 range, but typical speech is 0.01-0.1)
+                let rawLevel = synth.micInputLevel
+                // Scale for display (multiply by ~10 to make it visible)
+                self.micLevel = min(1.0, Double(rawLevel) * 10)
+            }
+        }
     }
     
     // MARK: - Control Updates

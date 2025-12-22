@@ -51,6 +51,14 @@ class RAVESynthesizer {
     // Available styles (from server)
     private(set) var availableStyles: [String] = []
     
+    // Microphone input for style transfer
+    private var micInputEnabled = false
+    private var micInputBuffer: [Float] = []
+    private let micInputLock = NSLock()
+    private let micChunkSize = 48000  // 1 second chunks for style transfer
+    private var micProcessingTask: Task<Void, Never>?
+    private(set) var micInputLevel: Float = 0  // For UI level meter
+    
     // Current model name
     var currentModel: String {
         return bridge.modelName
@@ -411,5 +419,130 @@ class RAVESynthesizer {
         }
         
         return buffer
+    }
+    
+    // MARK: - Microphone Input (Voice Control)
+    
+    /// Enables microphone input for style transfer
+    /// Voice/humming will be transformed through RAVE's learned timbre
+    func enableMicInput() throws {
+        guard isServerRunning else {
+            throw RAVEError.bridgeNotStarted
+        }
+        
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        
+        print("RAVESynthesizer: Enabling mic input, format: \(inputFormat)")
+        
+        // Install tap on input
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            self?.processMicInput(buffer: buffer)
+        }
+        
+        micInputEnabled = true
+        startMicProcessingLoop()
+        
+        print("RAVESynthesizer: Mic input enabled")
+    }
+    
+    /// Disables microphone input
+    func disableMicInput() {
+        micInputEnabled = false
+        micProcessingTask?.cancel()
+        micProcessingTask = nil
+        
+        audioEngine.inputNode.removeTap(onBus: 0)
+        
+        micInputLock.lock()
+        micInputBuffer.removeAll()
+        micInputLock.unlock()
+        
+        print("RAVESynthesizer: Mic input disabled")
+    }
+    
+    /// Whether mic input is currently enabled
+    var isMicInputEnabled: Bool {
+        return micInputEnabled
+    }
+    
+    private func processMicInput(buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData else { return }
+        
+        let frameCount = Int(buffer.frameLength)
+        var samples = [Float](repeating: 0, count: frameCount)
+        
+        // Copy samples (mono)
+        for i in 0..<frameCount {
+            samples[i] = channelData[0][i]
+        }
+        
+        // Update input level for UI
+        let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(frameCount))
+        micInputLevel = rms
+        
+        // Resample if needed (input might not be 48kHz)
+        let inputFormat = audioEngine.inputNode.outputFormat(forBus: 0)
+        if inputFormat.sampleRate != sampleRate {
+            // Simple linear resampling
+            let ratio = sampleRate / inputFormat.sampleRate
+            let newCount = Int(Double(frameCount) * ratio)
+            var resampled = [Float](repeating: 0, count: newCount)
+            for i in 0..<newCount {
+                let srcIdx = Double(i) / ratio
+                let idx0 = Int(srcIdx)
+                let idx1 = min(idx0 + 1, frameCount - 1)
+                let frac = Float(srcIdx - Double(idx0))
+                resampled[i] = samples[idx0] * (1 - frac) + samples[idx1] * frac
+            }
+            samples = resampled
+        }
+        
+        // Add to buffer
+        micInputLock.lock()
+        micInputBuffer.append(contentsOf: samples)
+        
+        // Limit buffer size (max 2 seconds)
+        let maxBufferSize = Int(sampleRate * 2)
+        if micInputBuffer.count > maxBufferSize {
+            micInputBuffer.removeFirst(micInputBuffer.count - maxBufferSize)
+        }
+        micInputLock.unlock()
+    }
+    
+    private func startMicProcessingLoop() {
+        micProcessingTask?.cancel()
+        
+        micProcessingTask = Task { [weak self] in
+            guard let self = self else { return }
+            
+            while !Task.isCancelled && self.micInputEnabled {
+                // Check if we have enough audio to process
+                self.micInputLock.lock()
+                let hasEnoughAudio = self.micInputBuffer.count >= self.micChunkSize
+                var chunk: [Float] = []
+                if hasEnoughAudio {
+                    chunk = Array(self.micInputBuffer.prefix(self.micChunkSize))
+                    self.micInputBuffer.removeFirst(self.micChunkSize)
+                }
+                self.micInputLock.unlock()
+                
+                if hasEnoughAudio && !chunk.isEmpty {
+                    do {
+                        // Send to RAVE for style transfer
+                        let transformed = try await self.bridge.styleTransfer(inputAudio: chunk)
+                        
+                        // Add transformed audio to output buffer
+                        self.bridge.appendToBuffer(transformed)
+                        
+                    } catch {
+                        print("RAVESynthesizer: Style transfer error: \(error)")
+                    }
+                }
+                
+                // Small delay
+                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+            }
+        }
     }
 }

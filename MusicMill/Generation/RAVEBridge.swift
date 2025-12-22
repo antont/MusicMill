@@ -705,6 +705,35 @@ class RAVEBridge {
         _ = try receiveJSON([String: String].self)
     }
     
+    // MARK: - Style Transfer (Voice Input)
+    
+    /// Performs style transfer: sends input audio to RAVE, returns transformed audio
+    /// Use this for voice-controlled synthesis (humming → drums, etc.)
+    func styleTransfer(inputAudio: [Float]) async throws -> [Float] {
+        guard case .running = status else {
+            throw BridgeError.serverNotRunning
+        }
+        
+        try connect()
+        
+        // Convert float array to base64
+        let audioData = inputAudio.withUnsafeBufferPointer { buffer in
+            Data(buffer: buffer)
+        }
+        let audioBase64 = audioData.base64EncodedString()
+        
+        struct StyleTransferRequest: Encodable {
+            let command = "style_transfer"
+            let audio: String
+        }
+        
+        let request = StyleTransferRequest(audio: audioBase64)
+        try sendRequest(request)
+        
+        // Receive transformed audio
+        return try receiveAudio()
+    }
+    
     // MARK: - Audio Buffer Management
     
     /// Fills the audio buffer with generated samples
@@ -757,6 +786,19 @@ class RAVEBridge {
         audioBufferLock.lock()
         audioBuffer.removeAll()
         bufferReadPosition = 0
+        audioBufferLock.unlock()
+    }
+    
+    /// Appends samples to the audio buffer (used by style transfer)
+    func appendToBuffer(_ samples: [Float]) {
+        audioBufferLock.lock()
+        audioBuffer.append(contentsOf: samples)
+        
+        // Trim old samples to prevent memory growth
+        if bufferReadPosition > 48000 * 2 {
+            audioBuffer.removeFirst(bufferReadPosition)
+            bufferReadPosition = 0
+        }
         audioBufferLock.unlock()
     }
 }
