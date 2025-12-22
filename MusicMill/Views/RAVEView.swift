@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AVFoundation
 
 /// Dedicated RAVE neural synthesis control view
 /// Auto-starts server and provides comprehensive latent space controls
@@ -395,6 +396,30 @@ struct RAVEView: View {
                     }
             }
             
+            // Device selection
+            HStack(spacing: 12) {
+                Text("Input Device:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Picker("", selection: $controller.selectedInputDevice) {
+                    ForEach(controller.availableInputDevices, id: \.id) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 250)
+                .onChange(of: controller.selectedInputDevice) { _, deviceId in
+                    controller.selectInputDevice(id: deviceId)
+                }
+                
+                Button(action: { controller.refreshInputDevices() }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh device list")
+            }
+            
             HStack(spacing: 20) {
                 // Mic icon and status
                 HStack(spacing: 8) {
@@ -436,6 +461,9 @@ struct RAVEView: View {
             Text("Hum, beatbox, or sing to control RAVE. Your voice timing and dynamics drive the output.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+        }
+        .onAppear {
+            controller.refreshInputDevices()
         }
     }
     
@@ -535,6 +563,12 @@ enum Preset {
     case calm, balanced, intense, chaotic
 }
 
+struct AudioInputDevice: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let isDefault: Bool
+}
+
 // MARK: - RAVE View Controller
 
 @MainActor
@@ -567,6 +601,10 @@ class RAVEViewController: ObservableObject {
     @Published var micEnabled: Bool = false
     @Published var micLevel: Double = 0
     @Published var lfoDepth: Double = 0.3
+    
+    // Audio input devices
+    @Published var availableInputDevices: [AudioInputDevice] = []
+    @Published var selectedInputDevice: String = ""
     
     // Internal
     private var synthesizer: RAVESynthesizer?
@@ -786,6 +824,72 @@ class RAVEViewController: ObservableObject {
                 self.micLevel = min(1.0, Double(rawLevel) * 10)
             }
         }
+    }
+    
+    // MARK: - Audio Input Device Management
+    
+    func refreshInputDevices() {
+        #if os(macOS)
+        // Use AVCaptureDevice to enumerate audio input devices
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.microphone, .externalUnknown, .builtInMicrophone],
+            mediaType: .audio,
+            position: .unspecified
+        )
+        
+        var devices: [AudioInputDevice] = []
+        let defaultDevice = AVCaptureDevice.default(for: .audio)
+        
+        for device in discoverySession.devices {
+            devices.append(AudioInputDevice(
+                id: device.uniqueID,
+                name: device.localizedName,
+                isDefault: device.uniqueID == defaultDevice?.uniqueID
+            ))
+        }
+        
+        // If no devices found via discovery, try to get at least the default
+        if devices.isEmpty, let defaultDev = defaultDevice {
+            devices.append(AudioInputDevice(
+                id: defaultDev.uniqueID,
+                name: defaultDev.localizedName,
+                isDefault: true
+            ))
+        }
+        
+        availableInputDevices = devices
+        
+        // Set selected to default if not already set
+        if selectedInputDevice.isEmpty, let defaultDev = devices.first(where: { $0.isDefault }) {
+            selectedInputDevice = defaultDev.id
+        } else if selectedInputDevice.isEmpty, let first = devices.first {
+            selectedInputDevice = first.id
+        }
+        
+        print("RAVEViewController: Found \(devices.count) input devices")
+        for device in devices {
+            print("  - \(device.name) [\(device.id)] \(device.isDefault ? "(default)" : "")")
+        }
+        #endif
+    }
+    
+    func selectInputDevice(id: String) {
+        print("RAVEViewController: Selecting input device: \(id)")
+        selectedInputDevice = id
+        
+        // Note: AVAudioEngine uses the system default input device.
+        // To use a specific device, we'd need to use AudioUnit directly.
+        // For now, we just show what's available - the user can change
+        // the system default in System Settings > Sound > Input.
+        
+        #if os(macOS)
+        // Find the device name for display
+        if let device = availableInputDevices.first(where: { $0.id == id }) {
+            if !device.isDefault {
+                statusText = "Note: Set '\(device.name)' as system default in Sound settings"
+            }
+        }
+        #endif
     }
     
     // MARK: - Control Updates
