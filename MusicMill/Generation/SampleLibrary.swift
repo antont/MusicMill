@@ -343,43 +343,31 @@ class SampleLibrary: ObservableObject {
     }
     
     /// Loads samples from an array of segment URLs (for direct loading)
+    /// Uses fast cataloging without feature extraction for responsiveness
     func loadFromSegments(_ segmentURLs: [URL], style: String? = nil) async throws {
         await MainActor.run {
             isLoading = true
             loadingProgress = 0.0
+            loadingStatus = "Cataloging \(segmentURLs.count) segments..."
         }
         
         let total = segmentURLs.count
         
+        // Fast cataloging - just index files without extracting features
+        // Features will be extracted lazily when needed
         for (index, url) in segmentURLs.enumerated() {
-            var tempo: Double? = nil
-            var key: String? = nil
-            var energy: Double = 0.5
-            var spectralCentroid: Double = 1000.0
-            var duration: TimeInterval = 30.0
-            
-            do {
-                let features = try await featureExtractor.extractFeatures(from: url)
-                tempo = features.tempo
-                key = features.key
-                energy = features.energy
-                spectralCentroid = features.spectralCentroid
-                duration = features.duration
-            } catch {
-                print("Warning: Could not extract features from \(url.lastPathComponent)")
-            }
-            
+            // Use defaults - don't extract features during initial load (too slow!)
             let sampleID = UUID().uuidString
             let metadata = SampleMetadata(
-                style: style,
-                tempo: tempo,
-                key: key,
-                energy: energy,
-                spectralCentroid: spectralCentroid,
-                duration: duration,
+                style: style ?? inferStyle(from: url),
+                tempo: nil,  // Will be extracted lazily if needed
+                key: nil,
+                energy: 0.5,
+                spectralCentroid: 1000.0,
+                duration: 30.0,  // Default duration
                 sourceTrack: url.deletingPathExtension().lastPathComponent,
                 segmentStart: 0,
-                segmentEnd: duration,
+                segmentEnd: 30.0,
                 isBeat: false,
                 isPhrase: true,
                 isLoop: false
@@ -394,14 +382,33 @@ class SampleLibrary: ObservableObject {
             
             addSample(sample)
             
-            await MainActor.run {
-                loadingProgress = Double(index + 1) / Double(total)
+            // Update progress less frequently to reduce UI overhead
+            if index % 50 == 0 || index == total - 1 {
+                await MainActor.run {
+                    loadingProgress = Double(index + 1) / Double(total)
+                    loadingStatus = "Cataloging \(index + 1)/\(total) segments..."
+                }
             }
         }
         
         await MainActor.run {
             isLoading = false
+            loadingStatus = "Ready: \(samples.count) samples cataloged"
         }
+    }
+    
+    /// Infers style from URL path components
+    private func inferStyle(from url: URL) -> String? {
+        let pathComponents = url.pathComponents
+        // Try to find album or artist name from path
+        if let albumIndex = pathComponents.lastIndex(where: { $0.lowercased().contains("album") || pathComponents.count > 3 }) {
+            // Use parent directory name as style hint
+            let parentIndex = pathComponents.index(before: pathComponents.endIndex - 1)
+            if parentIndex >= pathComponents.startIndex {
+                return pathComponents[parentIndex]
+            }
+        }
+        return nil
     }
     
     /// Clears the buffer cache to free memory

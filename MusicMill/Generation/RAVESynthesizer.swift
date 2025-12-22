@@ -149,17 +149,23 @@ class RAVESynthesizer {
     /// Starts audio generation and playback
     func start() throws {
         guard isServerRunning else {
+            print("RAVESynthesizer: Cannot start - server not running")
             throw RAVEError.bridgeNotStarted
         }
         
+        print("RAVESynthesizer: Starting audio playback...")
+        
         if !audioEngine.isRunning {
             try audioEngine.start()
+            print("RAVESynthesizer: Audio engine started")
         }
         
         isPlaying = true
+        print("RAVESynthesizer: isPlaying = true")
         
         // Start buffer fill loop
         startBufferFillLoop()
+        print("RAVESynthesizer: Buffer fill loop started")
     }
     
     /// Stops audio generation and playback
@@ -267,9 +273,11 @@ class RAVESynthesizer {
     
     private func startBufferFillLoop() {
         bufferFillTask?.cancel()
+        print("RAVESynthesizer: Starting buffer fill loop")
         
         bufferFillTask = Task { [weak self] in
             guard let self = self else { return }
+            var fillCount = 0
             
             while !Task.isCancelled && self.isPlaying {
                 // Check if buffer needs filling
@@ -277,6 +285,10 @@ class RAVESynthesizer {
                     do {
                         let controls = self.getCurrentControls()
                         try await self.bridge.fillBuffer(controls: controls)
+                        fillCount += 1
+                        if fillCount <= 3 {
+                            print("RAVESynthesizer: Buffer filled (\(fillCount)), buffered: \(self.bridge.bufferedSamples)")
+                        }
                     } catch {
                         print("RAVESynthesizer: Buffer fill error: \(error)")
                     }
