@@ -258,12 +258,36 @@ This would enable:
 - RAVE automatically producing similar-sounding output
 - Smooth interpolation between styles during performance
 
+### Voice Input Control
+
+Use microphone input (humming, beatboxing) to drive RAVE in real-time:
+
+- **Humming → Percussion**: Hum "bm bm ts ts" → RAVE outputs actual drums
+- **Voice → Synth**: Sing melodies → RAVE transforms to synth textures  
+- **Beatboxing → Full Drums**: Real-time voice-to-drums conversion
+
+This leverages RAVE's encode-decode architecture:
+```
+Microphone → Encode → Latent Space → Decode → Percussion/Synth Output
+```
+
+The timing and dynamics of your voice control the output rhythm and intensity.
+
 ### Additional Enhancements
 
 - **MIDI control**: Map MIDI CC to latent dimensions for hardware control
 - **Audio reactive**: Use input audio features to modulate parameters
 - **Pattern memory**: Save and recall interesting latent configurations
 - **Multi-model blending**: Mix output from multiple RAVE models
+
+### Alternative Models to Explore
+
+**MusicGen** (Meta) - True generative music model:
+- Generates coherent music from text prompts or melody conditioning
+- Runs locally on M3 Max (1.5B parameter model fits in 36GB)
+- Speed: ~10-20 seconds to generate 10 seconds of audio (not realtime)
+- Use case: Batch pre-generate variations, use as source material
+- Could complement RAVE for offline content creation
 
 ## References
 
