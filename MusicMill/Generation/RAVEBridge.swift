@@ -282,15 +282,30 @@ class RAVEBridge {
         let process = Process()
         process.executableURL = pythonPath
         
-        var args = [serverScript.path, "--model", modelName, "--server"]
+        // Build model path - use pretrained directory
+        let pretrainedDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("MusicMill/RAVE/pretrained").path
+        let modelPath = "\(pretrainedDir)/\(modelName).ts"
+        
+        var args = [serverScript.path, "--model", modelPath, "--server"]
         if let anchors = anchorsPath {
             args.append(contentsOf: ["--anchors", anchors])
         }
         process.arguments = args
         
-        // Set environment
+        print("RAVEBridge: Starting server with command:")
+        print("  Python: \(pythonPath.path)")
+        print("  Script: \(serverScript.path)")
+        print("  Model: \(modelPath)")
+        print("  Args: \(args)")
+        
+        // Set environment - include venv paths
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
+        // Add venv to PATH
+        let venvBin = venvPath.appendingPathComponent("bin").path
+        env["PATH"] = "\(venvBin):\(env["PATH"] ?? "")"
+        env["VIRTUAL_ENV"] = venvPath.path
         process.environment = env
         
         // Capture output for debugging
@@ -319,8 +334,10 @@ class RAVEBridge {
             // Check if process died
             if !process.isRunning {
                 let output = String(data: pipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
-                setStatus(.error("Server crashed"))
-                throw BridgeError.serverStartFailed(output)
+                let errorMsg = output.isEmpty ? "Server exited with no output" : output
+                print("RAVEBridge: Server crashed. Output: \(errorMsg)")
+                setStatus(.error("Server crashed: \(errorMsg.prefix(100))"))
+                throw BridgeError.serverStartFailed(errorMsg)
             }
         }
         
