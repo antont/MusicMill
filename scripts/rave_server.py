@@ -248,10 +248,14 @@ class RAVEController:
                 self.lfo_phase = t[-1].item()
         
         # Apply tempo by interpolating along time axis
-        if tempo_factor != 1.0:
-            target_frames = int(num_frames / tempo_factor)
-            if target_frames > 0:
-                z = F.interpolate(z, size=target_frames, mode='linear', align_corners=False)
+        # Note: MPS upsample_linear1d has bugs with edge cases, so we do this on CPU
+        if tempo_factor != 1.0 and tempo_factor > 0:
+            target_frames = max(1, min(num_frames * 4, int(num_frames / tempo_factor)))
+            if target_frames != num_frames and target_frames >= 1:
+                # Move to CPU for interpolation (MPS has bugs with upsample_linear1d)
+                z_cpu = z.cpu()
+                z_cpu = F.interpolate(z_cpu, size=target_frames, mode='linear', align_corners=False)
+                z = z_cpu.to(self.device)
         
         # Decode
         with torch.no_grad():
