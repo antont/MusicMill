@@ -122,16 +122,34 @@ class RAVEBridge {
         self.anchorsPath = anchorsPath
         self.socketPath = "/tmp/rave_server.sock"
         
-        // Get paths
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.venvPath = documentsURL.appendingPathComponent("MusicMill/RAVE/venv")
+        // Get paths - try multiple locations for venv
+        // First try the real user Documents (works when not sandboxed)
+        let homeDir = NSHomeDirectory()
+        let realDocuments = URL(fileURLWithPath: homeDir).appendingPathComponent("Documents/MusicMill/RAVE/venv")
+        
+        // Also try the sandboxed container documents
+        let containerDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("MusicMill/RAVE/venv")
+        
+        // Check which one exists
+        let pythonInReal = realDocuments.appendingPathComponent("bin/python3")
+        let pythonInContainer = containerDocuments.appendingPathComponent("bin/python3")
+        
+        if FileManager.default.fileExists(atPath: pythonInReal.path) {
+            self.venvPath = realDocuments
+        } else if FileManager.default.fileExists(atPath: pythonInContainer.path) {
+            self.venvPath = containerDocuments
+        } else {
+            // Default to real documents path (will fail gracefully with good error message)
+            self.venvPath = realDocuments
+        }
         
         // Scripts are in the app bundle or workspace
         if let bundleScripts = Bundle.main.url(forResource: "scripts", withExtension: nil) {
             self.scriptsPath = bundleScripts
         } else {
             // Fallback to workspace location (for development)
-            self.scriptsPath = URL(fileURLWithPath: "/Users/tonialatalo/src/MusicMill/scripts")
+            self.scriptsPath = URL(fileURLWithPath: "\(homeDir)/src/MusicMill/scripts")
         }
     }
     
@@ -143,17 +161,28 @@ class RAVEBridge {
     
     /// Gets list of available RAVE models from the pretrained directory
     static func getAvailableModels() -> [String] {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let pretrainedDir = documentsURL.appendingPathComponent("MusicMill/RAVE/pretrained")
+        // Try multiple locations
+        let homeDir = NSHomeDirectory()
+        let paths = [
+            URL(fileURLWithPath: homeDir).appendingPathComponent("Documents/MusicMill/RAVE/pretrained"),
+            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("MusicMill/RAVE/pretrained")
+        ]
         
-        guard let files = try? FileManager.default.contentsOfDirectory(at: pretrainedDir, includingPropertiesForKeys: nil) else {
-            return []
+        for pretrainedDir in paths {
+            if let files = try? FileManager.default.contentsOfDirectory(at: pretrainedDir, includingPropertiesForKeys: nil) {
+                let models = files
+                    .filter { $0.pathExtension == "ts" }
+                    .map { $0.deletingPathExtension().lastPathComponent }
+                    .sorted()
+                
+                if !models.isEmpty {
+                    return models
+                }
+            }
         }
         
-        return files
-            .filter { $0.pathExtension == "ts" }
-            .map { $0.deletingPathExtension().lastPathComponent }
-            .sorted()
+        return []
     }
     
     /// Switches to a different RAVE model (restarts server)
@@ -173,6 +202,22 @@ class RAVEBridge {
     
     // MARK: - Server Lifecycle
     
+    /// Gets diagnostic information about paths
+    func getDiagnostics() -> [String: String] {
+        let pythonPath = venvPath.appendingPathComponent("bin/python3")
+        let serverScript = scriptsPath.appendingPathComponent("rave_server.py")
+        
+        return [
+            "venvPath": venvPath.path,
+            "pythonPath": pythonPath.path,
+            "pythonExists": FileManager.default.fileExists(atPath: pythonPath.path) ? "YES" : "NO",
+            "scriptsPath": scriptsPath.path,
+            "serverScript": serverScript.path,
+            "scriptExists": FileManager.default.fileExists(atPath: serverScript.path) ? "YES" : "NO",
+            "documentsDir": FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.path ?? "N/A"
+        ]
+    }
+    
     /// Starts the RAVE Python server
     func start() async throws {
         setStatus(.starting)
@@ -187,12 +232,23 @@ class RAVEBridge {
         // Check for venv
         let pythonPath = venvPath.appendingPathComponent("bin/python3")
         guard FileManager.default.fileExists(atPath: pythonPath.path) else {
-            setStatus(.error("Python venv not found"))
+            let diag = getDiagnostics()
+            print("RAVEBridge: Python not found. Diagnostics:")
+            for (key, value) in diag.sorted(by: { $0.key < $1.key }) {
+                print("  \(key): \(value)")
+            }
+            setStatus(.error("Python not found at: \(pythonPath.path)"))
             throw BridgeError.pythonNotFound
         }
         
         // Start server process
         let serverScript = scriptsPath.appendingPathComponent("rave_server.py")
+        
+        // Check script exists
+        guard FileManager.default.fileExists(atPath: serverScript.path) else {
+            setStatus(.error("Server script not found at: \(serverScript.path)"))
+            throw BridgeError.serverStartFailed("Server script not found")
+        }
         
         let process = Process()
         process.executableURL = pythonPath

@@ -855,4 +855,152 @@ struct MusicMillTests {
         print("\nReport written to: \(reportURL.path)")
         print("\n✓ Concatenative synthesis test complete!")
     }
+    
+    // MARK: - RAVE Bridge Tests
+    
+    @Test func testRAVEBridgePaths() async throws {
+        print(String(repeating: "=", count: 60))
+        print("RAVE BRIDGE PATH DIAGNOSTICS")
+        print(String(repeating: "=", count: 60))
+        
+        let bridge = RAVEBridge(modelName: "percussion")
+        let diag = bridge.getDiagnostics()
+        
+        print("\nPath Information:")
+        for (key, value) in diag.sorted(by: { $0.key < $1.key }) {
+            let status = value == "NO" ? "❌" : (value == "YES" ? "✓" : "")
+            print("  \(key): \(value) \(status)")
+        }
+        
+        // Check venv exists
+        let venvPath = diag["venvPath"] ?? ""
+        let pythonExists = diag["pythonExists"] == "YES"
+        
+        print("\nExpected venv location: ~/Documents/MusicMill/RAVE/venv")
+        print("Actual venv location: \(venvPath)")
+        
+        if !pythonExists {
+            print("\n⚠️  Python venv not found!")
+            print("To set up the RAVE environment, run:")
+            print("  cd /Users/tonialatalo/src/MusicMill")
+            print("  ./scripts/setup_rave.sh")
+        } else {
+            print("\n✓ Python venv found")
+        }
+        
+        // Check scripts exist
+        let scriptExists = diag["scriptExists"] == "YES"
+        if !scriptExists {
+            print("⚠️  Server script not found at: \(diag["serverScript"] ?? "unknown")")
+        } else {
+            print("✓ Server script found")
+        }
+        
+        // Check for available models
+        let models = RAVEBridge.getAvailableModels()
+        print("\nAvailable RAVE models: \(models.isEmpty ? "none found" : models.joined(separator: ", "))")
+        
+        if !models.isEmpty {
+            print("✓ Found \(models.count) model(s)")
+        }
+        
+        // Write diagnostic report
+        let outputDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("MusicMill")
+        try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        
+        let reportURL = outputDir.appendingPathComponent("rave_diagnostics.txt")
+        var report = """
+        ============================================================
+        RAVE BRIDGE DIAGNOSTICS
+        Generated: \(Date())
+        ============================================================
+        
+        PATH INFORMATION
+        ----------------
+        """
+        
+        for (key, value) in diag.sorted(by: { $0.key < $1.key }) {
+            report += "\n\(key): \(value)"
+        }
+        
+        report += """
+        
+        
+        AVAILABLE MODELS
+        ----------------
+        \(models.isEmpty ? "No models found" : models.joined(separator: "\n"))
+        
+        SETUP INSTRUCTIONS
+        ------------------
+        If Python venv is not found, run:
+          cd /Users/tonialatalo/src/MusicMill
+          ./scripts/setup_rave.sh
+        
+        If models are not found, download them to:
+          ~/Documents/MusicMill/RAVE/pretrained/
+        
+        ============================================================
+        """
+        
+        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
+        print("\nDiagnostics written to: \(reportURL.path)")
+        
+        // Assertions
+        #expect(pythonExists, "Python venv should exist at \(diag["pythonPath"] ?? "unknown")")
+        #expect(scriptExists, "Server script should exist")
+    }
+    
+    @Test func testRAVEServerStart() async throws {
+        print(String(repeating: "=", count: 60))
+        print("RAVE SERVER START TEST")
+        print(String(repeating: "=", count: 60))
+        
+        // First check paths
+        let bridge = RAVEBridge(modelName: "percussion")
+        let diag = bridge.getDiagnostics()
+        
+        guard diag["pythonExists"] == "YES" else {
+            print("⚠️  Skipping server test - Python venv not found")
+            print("Run setup_rave.sh first")
+            return
+        }
+        
+        guard diag["scriptExists"] == "YES" else {
+            print("⚠️  Skipping server test - Server script not found")
+            return
+        }
+        
+        let models = RAVEBridge.getAvailableModels()
+        guard !models.isEmpty else {
+            print("⚠️  Skipping server test - No models found")
+            return
+        }
+        
+        print("\nStarting RAVE server with model: \(bridge.modelName)")
+        
+        do {
+            try await bridge.start()
+            print("✓ Server started successfully!")
+            
+            // Test generation
+            print("\nTesting audio generation...")
+            let controls = RAVEBridge.Controls(energy: 0.7, tempoFactor: 1.0, variation: 0.5)
+            let audio = try await bridge.generate(controls: controls, frames: 25)
+            
+            print("  Generated \(audio.count) samples (\(String(format: "%.2f", Double(audio.count) / 48000.0)) seconds)")
+            #expect(audio.count > 0, "Should generate audio samples")
+            
+            // Get styles
+            let styles = bridge.getStyles()
+            print("  Available styles: \(styles.isEmpty ? "none (random generation)" : styles.joined(separator: ", "))")
+            
+            bridge.stop()
+            print("\n✓ Server stopped successfully!")
+            
+        } catch {
+            print("❌ Server start failed: \(error)")
+            throw error
+        }
+    }
 }
