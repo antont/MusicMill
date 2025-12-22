@@ -63,6 +63,23 @@ class RAVESynthesizer {
     var micOutputGain: Float = 2.0  // Boost output signal
     var micNoiseExcitation: Float = 0.5  // RAVE needs noise to respond well!
     
+    // Test signal generator
+    enum TestSignalType: String, CaseIterable {
+        case off = "Off"
+        case sine = "Sine Wave"
+        case lfoSine = "LFO Sine"
+        case rhythm = "Rhythm Clicks"
+        case noiseBurst = "Noise Bursts"
+        case square = "Square Wave"
+    }
+    var testSignalType: TestSignalType = .off
+    var testSignalFrequency: Float = 200  // Hz
+    var testSignalBPM: Float = 120
+    private var testSignalPhase: Float = 0
+    private var testSignalBeatPhase: Float = 0
+    private var testSignalEnabled = false
+    private var testSignalTask: Task<Void, Never>?
+    
     // Current model name
     var currentModel: String {
         return bridge.modelName
@@ -641,6 +658,161 @@ class RAVESynthesizer {
                 
                 // Short delay for responsive processing
                 try? await Task.sleep(nanoseconds: 10_000_000)  // 10ms
+            }
+        }
+    }
+    
+    // MARK: - Test Signal Generator
+    
+    /// Enables test signal generation for debugging RAVE input
+    func enableTestSignal(type: TestSignalType) {
+        testSignalType = type
+        
+        if type == .off {
+            disableTestSignal()
+            return
+        }
+        
+        guard isServerRunning else {
+            print("RAVESynthesizer: Cannot enable test signal - server not running")
+            return
+        }
+        
+        // Disable mic if it's on
+        if micInputEnabled {
+            disableMicInput()
+        }
+        
+        testSignalEnabled = true
+        testSignalPhase = 0
+        testSignalBeatPhase = 0
+        startTestSignalLoop()
+        
+        print("RAVESynthesizer: Test signal enabled: \(type.rawValue)")
+    }
+    
+    /// Disables test signal generation
+    func disableTestSignal() {
+        testSignalEnabled = false
+        testSignalTask?.cancel()
+        testSignalTask = nil
+        testSignalType = .off
+        print("RAVESynthesizer: Test signal disabled")
+    }
+    
+    private func startTestSignalLoop() {
+        testSignalTask?.cancel()
+        
+        testSignalTask = Task { [weak self] in
+            guard let self = self else { return }
+            
+            let chunkSize = self.micChunkSize
+            let sr = Float(self.sampleRate)
+            
+            while !Task.isCancelled && self.testSignalEnabled {
+                // Generate test signal chunk
+                var chunk = [Float](repeating: 0, count: chunkSize)
+                
+                switch self.testSignalType {
+                case .off:
+                    break
+                    
+                case .sine:
+                    // Simple sine wave
+                    let freq = self.testSignalFrequency
+                    let phaseInc = 2 * Float.pi * freq / sr
+                    for i in 0..<chunkSize {
+                        chunk[i] = 0.3 * sin(self.testSignalPhase)
+                        self.testSignalPhase += phaseInc
+                    }
+                    
+                case .lfoSine:
+                    // LFO-modulated sine (tremolo)
+                    let freq = self.testSignalFrequency
+                    let lfoFreq: Float = 5.0  // 5 Hz tremolo
+                    let phaseInc = 2 * Float.pi * freq / sr
+                    let lfoPhaseInc = 2 * Float.pi * lfoFreq / sr
+                    for i in 0..<chunkSize {
+                        let lfo = 0.5 + 0.5 * sin(self.testSignalBeatPhase)
+                        chunk[i] = 0.3 * sin(self.testSignalPhase) * lfo
+                        self.testSignalPhase += phaseInc
+                        self.testSignalBeatPhase += lfoPhaseInc
+                    }
+                    
+                case .rhythm:
+                    // Rhythm clicks at BPM
+                    let beatInterval = Int(sr * 60.0 / self.testSignalBPM)
+                    let decaySamples = Int(sr * 0.02)
+                    for i in 0..<chunkSize {
+                        let globalSample = Int(self.testSignalBeatPhase) + i
+                        let posInBeat = globalSample % beatInterval
+                        if posInBeat < decaySamples {
+                            let decay = exp(-Float(posInBeat) / Float(decaySamples) * 3)
+                            chunk[i] = 0.5 * decay
+                        }
+                    }
+                    self.testSignalBeatPhase += Float(chunkSize)
+                    
+                case .noiseBurst:
+                    // Noise bursts at BPM (like beatbox)
+                    let beatInterval = Int(sr * 60.0 / self.testSignalBPM)
+                    let burstSamples = Int(sr * 0.03)
+                    for i in 0..<chunkSize {
+                        let globalSample = Int(self.testSignalBeatPhase) + i
+                        let posInBeat = globalSample % beatInterval
+                        if posInBeat < burstSamples {
+                            let decay = exp(-Float(posInBeat) / Float(burstSamples) * 5)
+                            chunk[i] = 0.5 * decay * Float.random(in: -1...1)
+                        }
+                    }
+                    self.testSignalBeatPhase += Float(chunkSize)
+                    
+                case .square:
+                    // Square wave
+                    let freq = self.testSignalFrequency
+                    let phaseInc = 2 * Float.pi * freq / sr
+                    for i in 0..<chunkSize {
+                        chunk[i] = 0.3 * (sin(self.testSignalPhase) > 0 ? 1 : -1)
+                        self.testSignalPhase += phaseInc
+                    }
+                }
+                
+                // Keep phase bounded
+                if self.testSignalPhase > 2 * Float.pi * 1000 {
+                    self.testSignalPhase -= 2 * Float.pi * 1000
+                }
+                
+                // Update level meter
+                let rms = sqrt(chunk.map { $0 * $0 }.reduce(0, +) / Float(chunkSize))
+                self.micInputLevel = rms * self.micInputGain
+                
+                // Apply input gain
+                let gain = self.micInputGain
+                for i in 0..<chunkSize {
+                    chunk[i] *= gain
+                }
+                
+                // Send to RAVE
+                do {
+                    var transformed = try await self.bridge.styleTransfer(
+                        inputAudio: chunk,
+                        noiseExcitation: self.micNoiseExcitation
+                    )
+                    
+                    // Apply output gain
+                    let outputGain = self.micOutputGain
+                    for i in 0..<transformed.count {
+                        transformed[i] *= outputGain
+                    }
+                    
+                    self.bridge.appendToBuffer(transformed)
+                    
+                } catch {
+                    print("RAVESynthesizer: Test signal error: \(error)")
+                }
+                
+                // Small delay
+                try? await Task.sleep(nanoseconds: 10_000_000)
             }
         }
     }

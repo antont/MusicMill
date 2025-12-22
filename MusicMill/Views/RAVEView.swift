@@ -518,6 +518,57 @@ struct RAVEView: View {
             Text("💡 Tip: RAVE responds best to percussive sounds. Try beatboxing or making 'ts ts' sounds!")
                 .font(.caption)
                 .foregroundColor(.secondary)
+            
+            // Test Signal Generator
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Test Signal Generator")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                HStack(spacing: 20) {
+                    Picker("Signal", selection: $controller.testSignalType) {
+                        ForEach(TestSignalType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 140)
+                    .onChange(of: controller.testSignalType) { _, type in
+                        controller.setTestSignal(type: type)
+                    }
+                    
+                    if controller.testSignalType == .sine || 
+                       controller.testSignalType == .lfoSine || 
+                       controller.testSignalType == .square {
+                        HStack {
+                            Text("Freq:")
+                                .font(.caption)
+                            Slider(value: $controller.testSignalFreq, in: 50...1000)
+                                .frame(width: 80)
+                            Text("\(Int(controller.testSignalFreq))Hz")
+                                .font(.caption)
+                                .monospacedDigit()
+                                .frame(width: 50)
+                        }
+                    }
+                    
+                    if controller.testSignalType == .rhythm || 
+                       controller.testSignalType == .noiseBurst {
+                        HStack {
+                            Text("BPM:")
+                                .font(.caption)
+                            Slider(value: $controller.testSignalBPM, in: 60...240)
+                                .frame(width: 80)
+                            Text("\(Int(controller.testSignalBPM))")
+                                .font(.caption)
+                                .monospacedDigit()
+                                .frame(width: 35)
+                        }
+                    }
+                }
+            }
         }
         .onAppear {
             controller.refreshInputDevices()
@@ -626,6 +677,21 @@ struct AudioInputDevice: Identifiable, Hashable {
     let isDefault: Bool
 }
 
+enum TestSignalType: String, CaseIterable {
+    case off, sine, lfoSine, rhythm, noiseBurst, square
+    
+    var displayName: String {
+        switch self {
+        case .off: return "Off"
+        case .sine: return "Sine Wave"
+        case .lfoSine: return "LFO Sine"
+        case .rhythm: return "Rhythm Clicks"
+        case .noiseBurst: return "Noise Bursts"
+        case .square: return "Square Wave"
+        }
+    }
+}
+
 // MARK: - RAVE View Controller
 
 @MainActor
@@ -665,6 +731,11 @@ class RAVEViewController: ObservableObject {
     // Audio input devices
     @Published var availableInputDevices: [AudioInputDevice] = []
     @Published var selectedInputDevice: String = ""
+    
+    // Test signal generator
+    @Published var testSignalType: TestSignalType = .off
+    @Published var testSignalFreq: Double = 200
+    @Published var testSignalBPM: Double = 120
     
     // Internal
     private var synthesizer: RAVESynthesizer?
@@ -957,6 +1028,46 @@ class RAVEViewController: ObservableObject {
         synth.micInputGain = Float(micInputGain)
         synth.micOutputGain = Float(micOutputGain)
         synth.micNoiseExcitation = Float(micNoiseExcitation)
+    }
+    
+    // MARK: - Test Signal Generator
+    
+    func setTestSignal(type: TestSignalType) {
+        guard let synth = synthesizer else { return }
+        
+        // Disable mic if enabling test signal
+        if type != .off && micEnabled {
+            toggleMicInput(enabled: false)
+        }
+        
+        // Map our enum to synthesizer enum
+        let synthType: RAVESynthesizer.TestSignalType
+        switch type {
+        case .off: synthType = .off
+        case .sine: synthType = .sine
+        case .lfoSine: synthType = .lfoSine
+        case .rhythm: synthType = .rhythm
+        case .noiseBurst: synthType = .noiseBurst
+        case .square: synthType = .square
+        }
+        
+        // Update parameters
+        synth.testSignalFrequency = Float(testSignalFreq)
+        synth.testSignalBPM = Float(testSignalBPM)
+        
+        // Enable/disable
+        synth.enableTestSignal(type: synthType)
+        
+        // Start playback if not already playing
+        if type != .off && !isPlaying {
+            play()
+        }
+        
+        if type != .off {
+            statusText = "Test: \(type.displayName)"
+        } else if isServerRunning {
+            statusText = isPlaying ? "Playing" : "Running"
+        }
     }
     
     // MARK: - Control Updates
