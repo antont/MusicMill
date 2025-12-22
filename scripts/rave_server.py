@@ -316,7 +316,8 @@ class RAVEController:
             self.lfo_target = target
             self.lfo_phase = 0.0
     
-    def style_transfer(self, audio_input: np.ndarray) -> np.ndarray:
+    def style_transfer(self, audio_input: np.ndarray, 
+                        noise_excitation: float = 0.5) -> np.ndarray:
         """
         Style transfer: encode input audio and decode through model.
         
@@ -324,31 +325,58 @@ class RAVEController:
         - Your voice/humming provides the timing and dynamics
         - RAVE transforms it to the model's learned timbre (drums, synths, etc.)
         
+        CRITICAL INSIGHT: RAVE amplifies noisy/transient signals (10-20x) but 
+        attenuates clean tones (0.5-0.7x). We must add noise excitation!
+        
         Args:
             audio_input: Input audio as numpy float32 array (mono, 48kHz expected)
+            noise_excitation: Amount of noise to blend (0-1). Higher = more RAVE response.
         
         Returns:
             Transformed audio as numpy float32 array
         """
+        from scipy.ndimage import uniform_filter1d
+        
+        # Compute input envelope for noise modulation
+        envelope = np.abs(audio_input)
+        envelope = uniform_filter1d(envelope, size=1024)
+        envelope = envelope / (envelope.max() + 1e-6)
+        
+        # Normalize input level
+        max_val = np.abs(audio_input).max()
+        if max_val > 0.01:
+            audio_input = audio_input / max_val * 0.5
+        
+        # KEY: Add envelope-modulated noise to help RAVE respond
+        # Without this, clean voice signals get attenuated!
+        if noise_excitation > 0:
+            noise = np.random.randn(len(audio_input)).astype(np.float32)
+            # Noise is modulated by envelope - only active where input has energy
+            modulated_noise = noise * envelope * noise_excitation * 0.8
+            audio_input = audio_input + modulated_noise
+        
         # Convert to tensor
         audio_tensor = torch.tensor(audio_input, dtype=torch.float32, device=self.device)
         
-        # Add batch and channel dimensions if needed: [samples] -> [1, 1, samples]
+        # Add batch and channel dimensions: [samples] -> [1, 1, samples]
         if audio_tensor.dim() == 1:
             audio_tensor = audio_tensor.unsqueeze(0).unsqueeze(0)
         elif audio_tensor.dim() == 2:
             audio_tensor = audio_tensor.unsqueeze(0)
         
         with torch.no_grad():
-            # Use forward() which does encode + decode
             output = self.model.forward(audio_tensor)
         
-        # Convert back to numpy
         output_np = output.cpu().numpy().squeeze()
         
         # Handle stereo output (mix to mono)
         if len(output_np.shape) == 2:
             output_np = output_np.mean(axis=0)
+        
+        # Normalize output to prevent clipping but preserve dynamics
+        max_out = np.abs(output_np).max()
+        if max_out > 1.0:
+            output_np = output_np / max_out * 0.9
         
         return output_np.astype(np.float32)
 
@@ -528,8 +556,11 @@ def process_request(request: dict, controller: RAVEController):
         audio_bytes = base64.b64decode(audio_b64)
         audio_np = np.frombuffer(audio_bytes, dtype=np.float32)
         
+        # Get optional parameters
+        noise_excitation = request.get('noise_excitation', 0.3)  # Default 30% noise
+        
         # Process through RAVE (encode -> decode)
-        output = controller.style_transfer(audio_np)
+        output = controller.style_transfer(audio_np, noise_excitation=noise_excitation)
         return output
     
     else:

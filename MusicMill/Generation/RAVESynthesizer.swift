@@ -61,6 +61,7 @@ class RAVESynthesizer {
     private(set) var micInputLevel: Float = 0  // For UI level meter
     var micInputGain: Float = 3.0  // Boost input signal (adjustable)
     var micOutputGain: Float = 2.0  // Boost output signal
+    var micNoiseExcitation: Float = 0.5  // RAVE needs noise to respond well!
     
     // Current model name
     var currentModel: String {
@@ -609,8 +610,12 @@ class RAVESynthesizer {
                 
                 if hasEnoughAudio && !chunk.isEmpty {
                     do {
-                        // Send to RAVE for style transfer
-                        var transformed = try await self.bridge.styleTransfer(inputAudio: chunk)
+                        // Send to RAVE for style transfer with noise excitation
+                        let noiseExcitation = self.micNoiseExcitation
+                        var transformed = try await self.bridge.styleTransfer(
+                            inputAudio: chunk,
+                            noiseExcitation: noiseExcitation
+                        )
                         
                         // Apply output gain
                         let outputGain = self.micOutputGain
@@ -621,7 +626,7 @@ class RAVESynthesizer {
                         // Add transformed audio to output buffer
                         self.bridge.appendToBuffer(transformed)
                         
-                        print("RAVESynthesizer: Style transfer processed \(chunk.count) -> \(transformed.count) samples")
+                        print("RAVESynthesizer: Style transfer \(chunk.count) samples, noise=\(noiseExcitation)")
                         
                     } catch {
                         print("RAVESynthesizer: Style transfer error: \(error)")

@@ -709,7 +709,10 @@ class RAVEBridge {
     
     /// Performs style transfer: sends input audio to RAVE, returns transformed audio
     /// Use this for voice-controlled synthesis (humming → drums, etc.)
-    func styleTransfer(inputAudio: [Float]) async throws -> [Float] {
+    /// - Parameters:
+    ///   - inputAudio: Input audio samples
+    ///   - noiseExcitation: Amount of noise to add (0-1). RAVE responds much better to noisy signals!
+    func styleTransfer(inputAudio: [Float], noiseExcitation: Float = 0.5) async throws -> [Float] {
         guard case .running = status else {
             throw BridgeError.serverNotRunning
         }
@@ -725,9 +728,10 @@ class RAVEBridge {
         struct StyleTransferRequest: Encodable {
             let command = "style_transfer"
             let audio: String
+            let noise_excitation: Float
         }
         
-        let request = StyleTransferRequest(audio: audioBase64)
+        let request = StyleTransferRequest(audio: audioBase64, noise_excitation: noiseExcitation)
         try sendRequest(request)
         
         // Receive transformed audio

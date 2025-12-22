@@ -457,7 +457,7 @@ struct RAVEView: View {
                 }
                 
                 // Gain controls
-                HStack(spacing: 30) {
+                HStack(spacing: 20) {
                     // Input gain
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Input Gain")
@@ -465,7 +465,7 @@ struct RAVEView: View {
                             .foregroundColor(.secondary)
                         HStack {
                             Slider(value: $controller.micInputGain, in: 1...10)
-                                .frame(width: 100)
+                                .frame(width: 80)
                                 .onChange(of: controller.micInputGain) { _, gain in
                                     controller.updateMicGain()
                                 }
@@ -476,6 +476,22 @@ struct RAVEView: View {
                         }
                     }
                     
+                    // Noise excitation (critical for RAVE response!)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Noise Excitation")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        HStack {
+                            Slider(value: $controller.micNoiseExcitation, in: 0...1)
+                                .frame(width: 80)
+                            Text("\(Int(controller.micNoiseExcitation * 100))%")
+                                .font(.caption)
+                                .monospacedDigit()
+                                .frame(width: 35)
+                        }
+                    }
+                    .help("RAVE responds better to noise. Higher = more responsive but less tonal.")
+                    
                     // Output gain
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Output Gain")
@@ -483,7 +499,7 @@ struct RAVEView: View {
                             .foregroundColor(.secondary)
                         HStack {
                             Slider(value: $controller.micOutputGain, in: 0.5...5)
-                                .frame(width: 100)
+                                .frame(width: 80)
                                 .onChange(of: controller.micOutputGain) { _, gain in
                                     controller.updateMicGain()
                                 }
@@ -499,7 +515,7 @@ struct RAVEView: View {
             .background(Color.secondary.opacity(0.05))
             .cornerRadius(8)
             
-            Text("Hum, beatbox, or sing to control RAVE. Your voice timing and dynamics drive the output.")
+            Text("💡 Tip: RAVE responds best to percussive sounds. Try beatboxing or making 'ts ts' sounds!")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -644,6 +660,7 @@ class RAVEViewController: ObservableObject {
     @Published var lfoDepth: Double = 0.3
     @Published var micInputGain: Double = 3.0
     @Published var micOutputGain: Double = 2.0
+    @Published var micNoiseExcitation: Double = 0.5  // RAVE needs noise to respond!
     
     // Audio input devices
     @Published var availableInputDevices: [AudioInputDevice] = []
@@ -939,6 +956,7 @@ class RAVEViewController: ObservableObject {
         guard let synth = synthesizer else { return }
         synth.micInputGain = Float(micInputGain)
         synth.micOutputGain = Float(micOutputGain)
+        synth.micNoiseExcitation = Float(micNoiseExcitation)
     }
     
     // MARK: - Control Updates
