@@ -240,6 +240,13 @@ class SynthesisEngine {
         try await rave.switchModel(to: model)
     }
     
+    /// Gets RAVE bridge diagnostics
+    func getRAVEDiagnostics() -> [String: String] {
+        // Create a bridge temporarily just to get diagnostics if needed
+        let rave = getRaveSynthesizer()
+        return rave.getDiagnostics()
+    }
+    
     // MARK: - Playback Control
     
     /// Starts synthesis with current backend

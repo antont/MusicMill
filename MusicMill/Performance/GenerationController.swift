@@ -107,6 +107,18 @@ class GenerationController: ObservableObject {
             raveStatus = "Starting server..."
         }
         
+        // Write diagnostics to file for debugging
+        let diag = synthesisEngine.getRAVEDiagnostics()
+        var diagText = "RAVE Diagnostics - \(Date())\n"
+        diagText += String(repeating: "=", count: 50) + "\n"
+        for (key, value) in diag.sorted(by: { $0.key < $1.key }) {
+            diagText += "\(key): \(value)\n"
+        }
+        
+        // Write to a file in temp directory
+        let diagURL = URL(fileURLWithPath: "/tmp/rave_diagnostics.txt")
+        try? diagText.write(to: diagURL, atomically: true, encoding: .utf8)
+        
         do {
             try await synthesisEngine.startRAVEServer()
             
@@ -121,6 +133,7 @@ class GenerationController: ObservableObject {
             }
         } catch {
             await MainActor.run {
+                // The error message now includes path info
                 raveStatus = "Error: \(error.localizedDescription)"
             }
         }

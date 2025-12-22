@@ -54,8 +54,9 @@ class RAVEBridge {
         case connectionFailed(String)
         case communicationError(String)
         case invalidResponse
-        case pythonNotFound
+        case pythonNotFound(path: String)
         case serverStartFailed(String)
+        case scriptNotFound(path: String)
         
         var errorDescription: String? {
             switch self {
@@ -67,10 +68,12 @@ class RAVEBridge {
                 return "Communication error: \(msg)"
             case .invalidResponse:
                 return "Invalid response from server"
-            case .pythonNotFound:
-                return "Python not found in RAVE venv"
+            case .pythonNotFound(let path):
+                return "Python not found at: \(path)"
             case .serverStartFailed(let msg):
                 return "Failed to start server: \(msg)"
+            case .scriptNotFound(let path):
+                return "Server script not found at: \(path)"
             }
         }
     }
@@ -125,32 +128,58 @@ class RAVEBridge {
         // Get paths - try multiple locations for venv
         // First try the real user Documents (works when not sandboxed)
         let homeDir = NSHomeDirectory()
+        
+        // Debug: write init paths to file
+        var initLog = "RAVEBridge init - \(Date())\n"
+        initLog += "NSHomeDirectory: \(homeDir)\n"
+        
         let realDocuments = URL(fileURLWithPath: homeDir).appendingPathComponent("Documents/MusicMill/RAVE/venv")
         
         // Also try the sandboxed container documents
         let containerDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
             .appendingPathComponent("MusicMill/RAVE/venv")
         
+        initLog += "realDocuments venv: \(realDocuments.path)\n"
+        initLog += "containerDocuments venv: \(containerDocuments.path)\n"
+        
         // Check which one exists
         let pythonInReal = realDocuments.appendingPathComponent("bin/python3")
         let pythonInContainer = containerDocuments.appendingPathComponent("bin/python3")
         
+        initLog += "pythonInReal: \(pythonInReal.path)\n"
+        initLog += "pythonInReal exists: \(FileManager.default.fileExists(atPath: pythonInReal.path))\n"
+        initLog += "pythonInContainer: \(pythonInContainer.path)\n"
+        initLog += "pythonInContainer exists: \(FileManager.default.fileExists(atPath: pythonInContainer.path))\n"
+        
         if FileManager.default.fileExists(atPath: pythonInReal.path) {
             self.venvPath = realDocuments
+            initLog += "USING: realDocuments\n"
         } else if FileManager.default.fileExists(atPath: pythonInContainer.path) {
             self.venvPath = containerDocuments
+            initLog += "USING: containerDocuments\n"
         } else {
             // Default to real documents path (will fail gracefully with good error message)
             self.venvPath = realDocuments
+            initLog += "USING: realDocuments (default, not found)\n"
         }
         
         // Scripts are in the app bundle or workspace
         if let bundleScripts = Bundle.main.url(forResource: "scripts", withExtension: nil) {
             self.scriptsPath = bundleScripts
+            initLog += "scriptsPath: bundleScripts = \(bundleScripts.path)\n"
         } else {
             // Fallback to workspace location (for development)
             self.scriptsPath = URL(fileURLWithPath: "\(homeDir)/src/MusicMill/scripts")
+            initLog += "scriptsPath: fallback = \(homeDir)/src/MusicMill/scripts\n"
         }
+        
+        initLog += "Final venvPath: \(self.venvPath.path)\n"
+        initLog += "Final scriptsPath: \(self.scriptsPath.path)\n"
+        
+        // Write to multiple locations for debugging
+        try? initLog.write(toFile: "/tmp/rave_bridge_init.txt", atomically: true, encoding: .utf8)
+        try? initLog.write(toFile: "\(homeDir)/rave_bridge_init.txt", atomically: true, encoding: .utf8)
+        try? initLog.write(toFile: "\(homeDir)/Documents/rave_bridge_init.txt", atomically: true, encoding: .utf8)
     }
     
     deinit {
@@ -238,7 +267,7 @@ class RAVEBridge {
                 print("  \(key): \(value)")
             }
             setStatus(.error("Python not found at: \(pythonPath.path)"))
-            throw BridgeError.pythonNotFound
+            throw BridgeError.pythonNotFound(path: pythonPath.path)
         }
         
         // Start server process
@@ -247,7 +276,7 @@ class RAVEBridge {
         // Check script exists
         guard FileManager.default.fileExists(atPath: serverScript.path) else {
             setStatus(.error("Server script not found at: \(serverScript.path)"))
-            throw BridgeError.serverStartFailed("Server script not found")
+            throw BridgeError.scriptNotFound(path: serverScript.path)
         }
         
         let process = Process()

@@ -122,6 +122,11 @@ class RAVESynthesizer {
         return RAVEBridge.getAvailableModels()
     }
     
+    /// Gets diagnostics for debugging path issues
+    func getDiagnostics() -> [String: String] {
+        return bridge.getDiagnostics()
+    }
+    
     /// Switches to a different RAVE model (restarts server)
     func switchModel(to newModel: String) async throws {
         let wasPlaying = isPlaying
