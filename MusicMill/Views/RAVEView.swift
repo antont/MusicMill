@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import AVFoundation
+import AppKit
 
 /// Dedicated RAVE neural synthesis control view
 /// Auto-starts server and provides comprehensive latent space controls
@@ -37,6 +38,11 @@ struct RAVEView: View {
                 
                 // Voice input
                 micInputSection
+                
+                Divider()
+                
+                // Waveform display
+                waveformSection
                 
                 Divider()
                 
@@ -575,6 +581,64 @@ struct RAVEView: View {
         }
     }
     
+    // MARK: - Waveform Display Section
+    
+    private var waveformSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Waveforms")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Toggle("Show", isOn: $controller.showWaveforms)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                
+                Button(action: { controller.saveWaveformSnapshot() }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "camera")
+                        Text("Snapshot")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!controller.showWaveforms)
+            }
+            
+            if controller.showWaveforms {
+                HStack(spacing: 20) {
+                    // Input waveform
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Input")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        WaveformView(samples: controller.inputWaveform, color: .blue)
+                            .frame(height: 80)
+                            .background(Color.black.opacity(0.8))
+                            .cornerRadius(4)
+                    }
+                    
+                    // Output waveform
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Output")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        WaveformView(samples: controller.outputWaveform, color: .green)
+                            .frame(height: 80)
+                            .background(Color.black.opacity(0.8))
+                            .cornerRadius(4)
+                    }
+                }
+                
+                Text("Snapshot saves to ~/Documents/MusicMill/Waveforms/")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
     // MARK: - Playback Section
     
     private var playbackSection: some View {
@@ -653,6 +717,78 @@ struct VerticalSlider: View {
                         value = range.lowerBound + clampedValue * (range.upperBound - range.lowerBound)
                     }
             )
+        }
+    }
+}
+
+// MARK: - Waveform View
+
+struct WaveformView: View {
+    let samples: [Float]
+    let color: Color
+    
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let midY = height / 2
+            
+            Path { path in
+                guard !samples.isEmpty else { return }
+                
+                let step = max(1, samples.count / Int(width))
+                let pointCount = min(samples.count, Int(width))
+                
+                path.move(to: CGPoint(x: 0, y: midY))
+                
+                for i in 0..<pointCount {
+                    let sampleIndex = i * step
+                    guard sampleIndex < samples.count else { break }
+                    
+                    // Get max amplitude in this segment
+                    var maxSample: Float = 0
+                    for j in 0..<step {
+                        let idx = sampleIndex + j
+                        if idx < samples.count {
+                            maxSample = max(maxSample, abs(samples[idx]))
+                        }
+                    }
+                    
+                    let x = CGFloat(i)
+                    let y = midY - CGFloat(maxSample) * midY * 0.9
+                    
+                    path.addLine(to: CGPoint(x: x, y: y))
+                }
+                
+                // Mirror for bottom half
+                for i in stride(from: pointCount - 1, through: 0, by: -1) {
+                    let sampleIndex = i * step
+                    guard sampleIndex < samples.count else { continue }
+                    
+                    var maxSample: Float = 0
+                    for j in 0..<step {
+                        let idx = sampleIndex + j
+                        if idx < samples.count {
+                            maxSample = max(maxSample, abs(samples[idx]))
+                        }
+                    }
+                    
+                    let x = CGFloat(i)
+                    let y = midY + CGFloat(maxSample) * midY * 0.9
+                    
+                    path.addLine(to: CGPoint(x: x, y: y))
+                }
+                
+                path.closeSubpath()
+            }
+            .fill(color.opacity(0.7))
+            
+            // Center line
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: midY))
+                path.addLine(to: CGPoint(x: width, y: midY))
+            }
+            .stroke(color.opacity(0.3), lineWidth: 1)
         }
     }
 }
@@ -737,6 +873,13 @@ class RAVEViewController: ObservableObject {
     @Published var testSignalFreq: Double = 200
     @Published var testSignalBPM: Double = 120
     
+    // Waveform display
+    @Published var showWaveforms: Bool = false
+    @Published var inputWaveform: [Float] = []
+    @Published var outputWaveform: [Float] = []
+    private var waveformTimer: Timer?
+    private let waveformSampleCount = 2048
+    
     // Internal
     private var synthesizer: RAVESynthesizer?
     private var cancellables = Set<AnyCancellable>()
@@ -769,6 +912,17 @@ class RAVEViewController: ObservableObject {
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
             .sink { [weak self] volume in
                 self?.synthesizer?.setVolume(Float(volume))
+            }
+            .store(in: &cancellables)
+        
+        // Waveform display toggle
+        $showWaveforms
+            .sink { [weak self] show in
+                if show {
+                    self?.startWaveformUpdates()
+                } else {
+                    self?.stopWaveformUpdates()
+                }
             }
             .store(in: &cancellables)
     }
@@ -1063,11 +1217,137 @@ class RAVEViewController: ObservableObject {
             play()
         }
         
+        // Start waveform updates if showing waveforms
+        if type != .off && showWaveforms {
+            startWaveformUpdates()
+        }
+        
         if type != .off {
             statusText = "Test: \(type.displayName)"
         } else if isServerRunning {
             statusText = isPlaying ? "Playing" : "Running"
         }
+    }
+    
+    // MARK: - Waveform Display
+    
+    func startWaveformUpdates() {
+        waveformTimer?.invalidate()
+        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, let synth = self.synthesizer else { return }
+                self.inputWaveform = synth.getInputWaveform(sampleCount: self.waveformSampleCount)
+                self.outputWaveform = synth.getOutputWaveform(sampleCount: self.waveformSampleCount)
+            }
+        }
+    }
+    
+    func stopWaveformUpdates() {
+        waveformTimer?.invalidate()
+        waveformTimer = nil
+    }
+    
+    func saveWaveformSnapshot() {
+        guard !inputWaveform.isEmpty || !outputWaveform.isEmpty else { return }
+        
+        // Create waveforms directory
+        let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let waveformDir = docsURL.appendingPathComponent("MusicMill/Waveforms")
+        try? FileManager.default.createDirectory(at: waveformDir, withIntermediateDirectories: true)
+        
+        let timestamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        
+        // Save as PNG images using Core Graphics
+        if let inputImage = renderWaveformImage(samples: inputWaveform, color: .blue, size: CGSize(width: 800, height: 200)) {
+            let inputPath = waveformDir.appendingPathComponent("input_\(timestamp).png")
+            saveImage(inputImage, to: inputPath)
+        }
+        
+        if let outputImage = renderWaveformImage(samples: outputWaveform, color: .green, size: CGSize(width: 800, height: 200)) {
+            let outputPath = waveformDir.appendingPathComponent("output_\(timestamp).png")
+            saveImage(outputImage, to: outputPath)
+        }
+        
+        // Also save as text data for analysis
+        let inputDataPath = waveformDir.appendingPathComponent("input_\(timestamp).txt")
+        let outputDataPath = waveformDir.appendingPathComponent("output_\(timestamp).txt")
+        
+        try? inputWaveform.map { String($0) }.joined(separator: "\n").write(to: inputDataPath, atomically: true, encoding: .utf8)
+        try? outputWaveform.map { String($0) }.joined(separator: "\n").write(to: outputDataPath, atomically: true, encoding: .utf8)
+        
+        statusText = "Snapshot saved to ~/Documents/MusicMill/Waveforms/"
+    }
+    
+    private func renderWaveformImage(samples: [Float], color: NSColor, size: CGSize) -> NSImage? {
+        guard !samples.isEmpty else { return nil }
+        
+        let image = NSImage(size: size)
+        image.lockFocus()
+        
+        // Background
+        NSColor.black.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        
+        // Waveform
+        let path = NSBezierPath()
+        let midY = size.height / 2
+        let step = max(1, samples.count / Int(size.width))
+        
+        path.move(to: NSPoint(x: 0, y: midY))
+        
+        for i in 0..<Int(size.width) {
+            let sampleIndex = i * step
+            guard sampleIndex < samples.count else { break }
+            
+            var maxSample: Float = 0
+            for j in 0..<step {
+                let idx = sampleIndex + j
+                if idx < samples.count {
+                    maxSample = max(maxSample, abs(samples[idx]))
+                }
+            }
+            
+            let y = midY - CGFloat(maxSample) * midY * 0.9
+            path.line(to: NSPoint(x: CGFloat(i), y: y))
+        }
+        
+        // Bottom half
+        for i in stride(from: Int(size.width) - 1, through: 0, by: -1) {
+            let sampleIndex = i * step
+            guard sampleIndex < samples.count else { continue }
+            
+            var maxSample: Float = 0
+            for j in 0..<step {
+                let idx = sampleIndex + j
+                if idx < samples.count {
+                    maxSample = max(maxSample, abs(samples[idx]))
+                }
+            }
+            
+            let y = midY + CGFloat(maxSample) * midY * 0.9
+            path.line(to: NSPoint(x: CGFloat(i), y: y))
+        }
+        
+        path.close()
+        color.withAlphaComponent(0.7).setFill()
+        path.fill()
+        
+        // Center line
+        NSColor.gray.setStroke()
+        let centerLine = NSBezierPath()
+        centerLine.move(to: NSPoint(x: 0, y: midY))
+        centerLine.line(to: NSPoint(x: size.width, y: midY))
+        centerLine.stroke()
+        
+        image.unlockFocus()
+        return image
+    }
+    
+    private func saveImage(_ image: NSImage, to url: URL) {
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else { return }
+        try? pngData.write(to: url)
     }
     
     // MARK: - Control Updates

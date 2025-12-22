@@ -80,6 +80,12 @@ class RAVESynthesizer {
     private var testSignalEnabled = false
     private var testSignalTask: Task<Void, Never>?
     
+    // Waveform buffers for visualization
+    private let waveformLock = NSLock()
+    private var inputWaveformBuffer: [Float] = []
+    private var outputWaveformBuffer: [Float] = []
+    private let maxWaveformSamples = 8192
+    
     // Current model name
     var currentModel: String {
         return bridge.modelName
@@ -632,6 +638,9 @@ class RAVESynthesizer {
                 self.micInputLock.unlock()
                 
                 if hasEnoughAudio && !chunk.isEmpty {
+                    // Store input waveform for visualization
+                    self.storeInputWaveform(chunk)
+                    
                     do {
                         // Send to RAVE for style transfer with noise excitation
                         let noiseExcitation = self.micNoiseExcitation
@@ -645,6 +654,9 @@ class RAVESynthesizer {
                         for i in 0..<transformed.count {
                             transformed[i] *= outputGain
                         }
+                        
+                        // Store output waveform for visualization
+                        self.storeOutputWaveform(transformed)
                         
                         // Add transformed audio to output buffer
                         self.bridge.appendToBuffer(transformed)
@@ -792,6 +804,9 @@ class RAVESynthesizer {
                     chunk[i] *= gain
                 }
                 
+                // Store input waveform for visualization
+                self.storeInputWaveform(chunk)
+                
                 // Send to RAVE
                 do {
                     var transformed = try await self.bridge.styleTransfer(
@@ -805,6 +820,9 @@ class RAVESynthesizer {
                         transformed[i] *= outputGain
                     }
                     
+                    // Store output waveform for visualization
+                    self.storeOutputWaveform(transformed)
+                    
                     self.bridge.appendToBuffer(transformed)
                     
                 } catch {
@@ -815,5 +833,47 @@ class RAVESynthesizer {
                 try? await Task.sleep(nanoseconds: 10_000_000)
             }
         }
+    }
+    
+    // MARK: - Waveform Visualization
+    
+    private func storeInputWaveform(_ samples: [Float]) {
+        waveformLock.lock()
+        inputWaveformBuffer.append(contentsOf: samples)
+        if inputWaveformBuffer.count > maxWaveformSamples {
+            inputWaveformBuffer.removeFirst(inputWaveformBuffer.count - maxWaveformSamples)
+        }
+        waveformLock.unlock()
+    }
+    
+    private func storeOutputWaveform(_ samples: [Float]) {
+        waveformLock.lock()
+        outputWaveformBuffer.append(contentsOf: samples)
+        if outputWaveformBuffer.count > maxWaveformSamples {
+            outputWaveformBuffer.removeFirst(outputWaveformBuffer.count - maxWaveformSamples)
+        }
+        waveformLock.unlock()
+    }
+    
+    /// Gets the current input waveform for display
+    func getInputWaveform(sampleCount: Int = 2048) -> [Float] {
+        waveformLock.lock()
+        defer { waveformLock.unlock() }
+        
+        if inputWaveformBuffer.count <= sampleCount {
+            return inputWaveformBuffer
+        }
+        return Array(inputWaveformBuffer.suffix(sampleCount))
+    }
+    
+    /// Gets the current output waveform for display
+    func getOutputWaveform(sampleCount: Int = 2048) -> [Float] {
+        waveformLock.lock()
+        defer { waveformLock.unlock() }
+        
+        if outputWaveformBuffer.count <= sampleCount {
+            return outputWaveformBuffer
+        }
+        return Array(outputWaveformBuffer.suffix(sampleCount))
     }
 }
