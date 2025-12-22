@@ -46,7 +46,7 @@ class RAVESynthesizer {
     
     // Buffer management
     private var bufferFillTask: Task<Void, Never>?
-    private let minBufferedSamples = 48000  // 1 second minimum buffer
+    private let minBufferedSamples = 96000  // 2 seconds minimum buffer for smoother playback
     
     // Available styles (from server)
     private(set) var availableStyles: [String] = []

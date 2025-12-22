@@ -116,7 +116,7 @@ class RAVEBridge {
     
     private let sampleRate: Double = 48000
     private let samplesPerFrame: Int = 2048
-    private let bufferChunkFrames: Int = 50  // ~2 seconds of audio per request
+    private let bufferChunkFrames: Int = 100  // ~4 seconds of audio per request (larger = smoother)
     
     // MARK: - Initialization
     
@@ -405,10 +405,20 @@ class RAVEBridge {
     
     // MARK: - Communication
     
-    /// Connects to the server socket
+    /// Connects to the server socket (reuses existing connection if valid)
     private func connect() throws {
+        // Reuse existing connection if socket is valid
         if socket >= 0 {
+            // Test if connection is still alive by checking for errors
+            var error: Int32 = 0
+            var len = socklen_t(MemoryLayout<Int32>.size)
+            let result = getsockopt(socket, SOL_SOCKET, SO_ERROR, &error, &len)
+            if result == 0 && error == 0 {
+                return  // Connection still good, reuse it
+            }
+            // Connection is dead, close and reconnect
             Darwin.close(socket)
+            socket = -1
         }
         
         socket = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
@@ -435,6 +445,8 @@ class RAVEBridge {
             socket = -1
             throw BridgeError.connectionFailed("Connect failed: \(errno)")
         }
+        
+        print("RAVEBridge: Connected to server")
     }
     
     /// Sends a JSON request to the server
