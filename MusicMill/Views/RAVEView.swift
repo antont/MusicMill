@@ -420,39 +420,80 @@ struct RAVEView: View {
                 .help("Refresh device list")
             }
             
-            HStack(spacing: 20) {
-                // Mic icon and status
-                HStack(spacing: 8) {
-                    Image(systemName: controller.micEnabled ? "mic.fill" : "mic.slash")
-                        .font(.title2)
-                        .foregroundColor(controller.micEnabled ? .red : .secondary)
+            VStack(spacing: 12) {
+                HStack(spacing: 20) {
+                    // Mic icon and status
+                    HStack(spacing: 8) {
+                        Image(systemName: controller.micEnabled ? "mic.fill" : "mic.slash")
+                            .font(.title2)
+                            .foregroundColor(controller.micEnabled ? .red : .secondary)
+                        
+                        Text(controller.micEnabled ? "Listening..." : "Off")
+                            .foregroundColor(.secondary)
+                    }
                     
-                    Text(controller.micEnabled ? "Listening..." : "Off")
-                        .foregroundColor(.secondary)
+                    // Level meter
+                    if controller.micEnabled {
+                        HStack(spacing: 4) {
+                            Text("Level:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(Color.secondary.opacity(0.2))
+                                    
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(controller.micLevel > 0.8 ? Color.red : Color.green)
+                                        .frame(width: geometry.size.width * CGFloat(controller.micLevel))
+                                }
+                            }
+                            .frame(width: 100, height: 8)
+                        }
+                    }
+                    
+                    Spacer()
                 }
                 
-                // Level meter
-                if controller.micEnabled {
-                    HStack(spacing: 4) {
-                        Text("Level:")
+                // Gain controls
+                HStack(spacing: 30) {
+                    // Input gain
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Input Gain")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.secondary.opacity(0.2))
-                                
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(controller.micLevel > 0.8 ? Color.red : Color.green)
-                                    .frame(width: geometry.size.width * CGFloat(controller.micLevel))
-                            }
+                        HStack {
+                            Slider(value: $controller.micInputGain, in: 1...10)
+                                .frame(width: 100)
+                                .onChange(of: controller.micInputGain) { _, gain in
+                                    controller.updateMicGain()
+                                }
+                            Text(String(format: "%.1fx", controller.micInputGain))
+                                .font(.caption)
+                                .monospacedDigit()
+                                .frame(width: 35)
                         }
-                        .frame(width: 100, height: 8)
+                    }
+                    
+                    // Output gain
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Output Gain")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        HStack {
+                            Slider(value: $controller.micOutputGain, in: 0.5...5)
+                                .frame(width: 100)
+                                .onChange(of: controller.micOutputGain) { _, gain in
+                                    controller.updateMicGain()
+                                }
+                            Text(String(format: "%.1fx", controller.micOutputGain))
+                                .font(.caption)
+                                .monospacedDigit()
+                                .frame(width: 35)
+                        }
                     }
                 }
-                
-                Spacer()
             }
             .padding()
             .background(Color.secondary.opacity(0.05))
@@ -601,6 +642,8 @@ class RAVEViewController: ObservableObject {
     @Published var micEnabled: Bool = false
     @Published var micLevel: Double = 0
     @Published var lfoDepth: Double = 0.3
+    @Published var micInputGain: Double = 3.0
+    @Published var micOutputGain: Double = 2.0
     
     // Audio input devices
     @Published var availableInputDevices: [AudioInputDevice] = []
@@ -890,6 +933,12 @@ class RAVEViewController: ObservableObject {
             }
         }
         #endif
+    }
+    
+    func updateMicGain() {
+        guard let synth = synthesizer else { return }
+        synth.micInputGain = Float(micInputGain)
+        synth.micOutputGain = Float(micOutputGain)
     }
     
     // MARK: - Control Updates

@@ -56,9 +56,11 @@ class RAVESynthesizer {
     private var micInputEnabled = false
     private var micInputBuffer: [Float] = []
     private let micInputLock = NSLock()
-    private let micChunkSize = 48000  // 1 second chunks for style transfer
+    private let micChunkSize = 8192  // ~170ms chunks for responsive style transfer (multiple of RAVE frame size)
     private var micProcessingTask: Task<Void, Never>?
     private(set) var micInputLevel: Float = 0  // For UI level meter
+    var micInputGain: Float = 3.0  // Boost input signal (adjustable)
+    var micOutputGain: Float = 2.0  // Boost output signal
     
     // Current model name
     var currentModel: String {
@@ -544,14 +546,20 @@ class RAVESynthesizer {
         let frameCount = Int(buffer.frameLength)
         var samples = [Float](repeating: 0, count: frameCount)
         
-        // Copy samples (mono)
+        // Copy samples (mono) with input gain
+        let gain = micInputGain
         for i in 0..<frameCount {
-            samples[i] = channelData[0][i]
+            samples[i] = channelData[0][i] * gain
         }
         
-        // Update input level for UI
+        // Update input level for UI (post-gain)
         let rms = sqrt(samples.map { $0 * $0 }.reduce(0, +) / Float(frameCount))
         micInputLevel = rms
+        
+        // Debug: print level occasionally
+        if Int.random(in: 0..<50) == 0 {
+            print("RAVESynthesizer: Mic RMS level: \(rms), samples: \(frameCount)")
+        }
         
         // Resample if needed (input might not be 48kHz)
         let inputFormat = audioEngine.inputNode.outputFormat(forBus: 0)
@@ -602,18 +610,26 @@ class RAVESynthesizer {
                 if hasEnoughAudio && !chunk.isEmpty {
                     do {
                         // Send to RAVE for style transfer
-                        let transformed = try await self.bridge.styleTransfer(inputAudio: chunk)
+                        var transformed = try await self.bridge.styleTransfer(inputAudio: chunk)
+                        
+                        // Apply output gain
+                        let outputGain = self.micOutputGain
+                        for i in 0..<transformed.count {
+                            transformed[i] *= outputGain
+                        }
                         
                         // Add transformed audio to output buffer
                         self.bridge.appendToBuffer(transformed)
+                        
+                        print("RAVESynthesizer: Style transfer processed \(chunk.count) -> \(transformed.count) samples")
                         
                     } catch {
                         print("RAVESynthesizer: Style transfer error: \(error)")
                     }
                 }
                 
-                // Small delay
-                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+                // Short delay for responsive processing
+                try? await Task.sleep(nanoseconds: 10_000_000)  // 10ms
             }
         }
     }
