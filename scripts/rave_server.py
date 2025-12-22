@@ -184,7 +184,8 @@ class RAVEController:
         """
         Generate audio chunk with current controls.
         
-        Uses temporal evolution to create varied, continuous audio across chunks.
+        SIMPLE APPROACH: Just use random latent like direct generation.
+        This creates varied, interesting audio without repetition.
         
         Args:
             num_frames: Number of latent frames to generate
@@ -193,35 +194,12 @@ class RAVEController:
         Returns:
             Audio samples as numpy array
         """
-        with self.lock:
-            # Interpolate current toward target (for style transitions)
-            self.current_latent = (
-                self.current_latent + 
-                (self.target_latent - self.current_latent) * self.interpolation_rate
-            )
-            base_latent = self.current_latent.clone()
-            variation = self.variation_amount
-            start_phase = self.time_phase
-        
-        # Generate latent sequence - similar to direct generation but with style control
-        # The key insight: direct generation uses random z for each frame, which creates variety
-        
-        # Start with random latent for full variety (like direct generation)
+        # SIMPLE: Just generate random latent for each frame
+        # This is EXACTLY what direct generation does, and it sounds good!
         z = torch.randn(1, self.latent_dim, num_frames, device=self.device)
         
-        # Blend toward the target style (base_latent) based on variation setting
-        # variation=0 -> pure style, variation=1 -> pure random
-        style_weight = 1.0 - variation
-        if style_weight > 0:
-            style_expanded = base_latent.unsqueeze(0).unsqueeze(-1).expand(-1, -1, num_frames)
-            z = z * variation + style_expanded * style_weight
-        
-        # Scale by energy-based magnitude
-        z = z * (0.5 + variation * 0.5)
-        
-        # Update phase for next chunk (ensures continuity)
-        with self.lock:
-            self.time_phase = start_phase + num_frames
+        # That's it! Random latent -> decode -> audio
+        # The RAVE model handles making it sound musical
         
         # Apply tempo by interpolating along time axis
         if tempo_factor != 1.0:
