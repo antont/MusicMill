@@ -293,11 +293,14 @@ class RAVEBridge {
         }
         process.arguments = args
         
-        print("RAVEBridge: Starting server with command:")
-        print("  Python: \(pythonPath.path)")
-        print("  Script: \(serverScript.path)")
-        print("  Model: \(modelPath)")
-        print("  Args: \(args)")
+        // Log to file for debugging
+        var serverLog = "RAVEBridge: Starting server at \(Date())\n"
+        serverLog += "  Python: \(pythonPath.path)\n"
+        serverLog += "  Script: \(serverScript.path)\n"
+        serverLog += "  Model: \(modelPath)\n"
+        serverLog += "  Args: \(args)\n"
+        try? serverLog.write(toFile: "/tmp/rave_server_start.log", atomically: true, encoding: .utf8)
+        print(serverLog)
         
         // Set environment - include venv paths
         var env = ProcessInfo.processInfo.environment
@@ -335,12 +338,16 @@ class RAVEBridge {
             if !process.isRunning {
                 let output = String(data: pipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
                 let errorMsg = output.isEmpty ? "Server exited with no output" : output
+                let crashLog = "RAVEBridge: Server crashed at \(Date())\nOutput:\n\(errorMsg)"
+                try? crashLog.write(toFile: "/tmp/rave_server_crash.log", atomically: true, encoding: .utf8)
                 print("RAVEBridge: Server crashed. Output: \(errorMsg)")
                 setStatus(.error("Server crashed: \(errorMsg.prefix(100))"))
                 throw BridgeError.serverStartFailed(errorMsg)
             }
         }
         
+        let timeoutLog = "RAVEBridge: Server start timeout at \(Date())\nProcess running: \(process.isRunning)"
+        try? timeoutLog.write(toFile: "/tmp/rave_server_timeout.log", atomically: true, encoding: .utf8)
         setStatus(.error("Server start timeout"))
         throw BridgeError.serverStartFailed("Timeout waiting for server")
     }
