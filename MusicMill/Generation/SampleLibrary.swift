@@ -36,7 +36,7 @@ class SampleLibrary: ObservableObject {
     private var styleIndex: [String: [String]] = [:] // style -> sample IDs
     private var tempoIndex: [Int: [String]] = [:] // rounded BPM -> sample IDs
     private var keyIndex: [String: [String]] = [:] // key -> sample IDs
-    private let featureExtractor = FeatureExtractor()
+    // Note: No FeatureExtractor here - all features come from pre-analyzed data
     
     /// Adds a sample to the library
     func addSample(_ sample: Sample) {
@@ -189,7 +189,8 @@ class SampleLibrary: ObservableObject {
     
     // MARK: - Loading from Analysis Storage
     
-    /// Loads samples from a previously analyzed collection
+    /// Loads samples from a previously analyzed collection using PRE-ANALYZED data
+    /// No feature extraction happens here - all features come from analysis.json
     func loadFromAnalysis(collectionURL: URL) async throws {
         let storage = AnalysisStorage()
         
@@ -204,7 +205,7 @@ class SampleLibrary: ObservableObject {
         await MainActor.run {
             isLoading = true
             loadingProgress = 0.0
-            loadingStatus = "Loading segments..."
+            loadingStatus = "Loading pre-analyzed segments..."
         }
         
         // Get segments directory
@@ -214,24 +215,32 @@ class SampleLibrary: ObservableObject {
             throw LibraryError.segmentsNotFound
         }
         
+        // Build a lookup map from audio file paths to their pre-analyzed features
+        var featuresLookup: [String: AnalysisStorage.AudioFeaturesInfo] = [:]
+        for audioFile in analysis.audioFiles {
+            if let features = audioFile.features {
+                // Map by filename (without extension) for matching
+                let filename = URL(fileURLWithPath: audioFile.path).deletingPathExtension().lastPathComponent
+                featuresLookup[filename] = features
+            }
+        }
+        
         // List all segment files
         let segmentFiles = try FileManager.default.contentsOfDirectory(
             at: segmentsDir,
-            includingPropertiesForKeys: [.fileSizeKey]
+            includingPropertiesForKeys: nil
         ).filter { $0.pathExtension == "m4a" }
         
         let totalSegments = segmentFiles.count
         var loadedCount = 0
         
         for segmentURL in segmentFiles {
-            // Parse segment filename to extract metadata
-            // Format: "TrackName_Style_segN.m4a"
             let filename = segmentURL.deletingPathExtension().lastPathComponent
             let parts = filename.components(separatedBy: "_")
             
+            // Infer style from filename or organized styles
             var style: String? = nil
             if parts.count >= 2 {
-                // Last part before seg number is style
                 for i in (0..<parts.count).reversed() {
                     if parts[i].hasPrefix("seg") { continue }
                     style = parts[i]
@@ -239,54 +248,42 @@ class SampleLibrary: ObservableObject {
                 }
             }
             
-            // Extract features from segment
-            var tempo: Double? = nil
-            var key: String? = nil
-            var energy: Double = 0.5
-            var spectralCentroid: Double = 1000.0
-            var duration: TimeInterval = 30.0
+            // Try to find pre-analyzed features for the source track
+            let sourceTrack = parts.first ?? filename
+            let preAnalyzedFeatures = featuresLookup[sourceTrack]
             
-            do {
-                let features = try await featureExtractor.extractFeatures(from: segmentURL)
-                tempo = features.tempo
-                key = features.key
-                energy = features.energy
-                spectralCentroid = features.spectralCentroid
-                duration = features.duration
-            } catch {
-                print("Warning: Could not extract features from \(filename): \(error)")
-            }
-            
-            // Create sample entry (buffer loaded lazily)
-            let sampleID = UUID().uuidString
+            // Use pre-analyzed data (NO feature extraction!)
             let metadata = SampleMetadata(
                 style: style,
-                tempo: tempo,
-                key: key,
-                energy: energy,
-                spectralCentroid: spectralCentroid,
-                duration: duration,
-                sourceTrack: parts.first,
-                segmentStart: 0, // Unknown from filename
-                segmentEnd: duration,
+                tempo: preAnalyzedFeatures?.tempo,
+                key: preAnalyzedFeatures?.key,
+                energy: preAnalyzedFeatures?.energy ?? 0.5,
+                spectralCentroid: preAnalyzedFeatures?.spectralCentroid ?? 1000.0,
+                duration: preAnalyzedFeatures?.duration ?? 30.0,
+                sourceTrack: sourceTrack,
+                segmentStart: 0,
+                segmentEnd: preAnalyzedFeatures?.duration ?? 30.0,
                 isBeat: false,
                 isPhrase: true,
                 isLoop: false
             )
             
             let sample = Sample(
-                id: sampleID,
+                id: UUID().uuidString,
                 url: segmentURL,
-                buffer: nil, // Load lazily
+                buffer: nil, // Load lazily when needed for playback
                 metadata: metadata
             )
             
             addSample(sample)
             
             loadedCount += 1
-            await MainActor.run {
-                loadingProgress = Double(loadedCount) / Double(totalSegments)
-                loadingStatus = "Loaded \(loadedCount)/\(totalSegments) segments"
+            // Update progress less frequently
+            if loadedCount % 50 == 0 || loadedCount == totalSegments {
+                await MainActor.run {
+                    loadingProgress = Double(loadedCount) / Double(totalSegments)
+                    loadingStatus = "Cataloged \(loadedCount)/\(totalSegments) segments"
+                }
             }
         }
         
@@ -343,7 +340,8 @@ class SampleLibrary: ObservableObject {
     }
     
     /// Loads samples from an array of segment URLs (for direct loading)
-    /// Uses fast cataloging without feature extraction for responsiveness
+    /// This is a FAST catalog-only operation - NO feature extraction!
+    /// All features should be pre-computed during analysis phase
     func loadFromSegments(_ segmentURLs: [URL], style: String? = nil) async throws {
         await MainActor.run {
             isLoading = true
@@ -353,10 +351,9 @@ class SampleLibrary: ObservableObject {
         
         let total = segmentURLs.count
         
-        // Fast cataloging - just index files without extracting features
-        // Features will be extracted lazily when needed
+        // Fast cataloging only - just index files for playback
+        // Features are NOT extracted here - they should come from pre-analyzed data
         for (index, url) in segmentURLs.enumerated() {
-            // Use defaults - don't extract features during initial load (too slow!)
             let sampleID = UUID().uuidString
             let metadata = SampleMetadata(
                 style: style ?? inferStyle(from: url),
