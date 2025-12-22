@@ -51,6 +51,11 @@ class RAVESynthesizer {
     // Available styles (from server)
     private(set) var availableStyles: [String] = []
     
+    // Current model name
+    var currentModel: String {
+        return bridge.modelName
+    }
+    
     // MARK: - Initialization
     
     init(modelName: String = "percussion", anchorsPath: String? = nil) {
@@ -110,6 +115,28 @@ class RAVESynthesizer {
             return true
         }
         return false
+    }
+    
+    /// Gets list of available RAVE models
+    static func getAvailableModels() -> [String] {
+        return RAVEBridge.getAvailableModels()
+    }
+    
+    /// Switches to a different RAVE model (restarts server)
+    func switchModel(to newModel: String) async throws {
+        let wasPlaying = isPlaying
+        if wasPlaying {
+            stop()
+        }
+        
+        try await bridge.switchModel(to: newModel)
+        availableStyles = bridge.getStyles()
+        
+        print("RAVESynthesizer: Switched to model: \(newModel)")
+        
+        if wasPlaying {
+            try start()
+        }
     }
     
     // MARK: - Playback Control

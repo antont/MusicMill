@@ -15,6 +15,8 @@ class GenerationController: ObservableObject {
     @Published var availableStyles: [String] = []
     @Published var raveStatus: String = "Not started"
     @Published var raveStyles: [String] = []
+    @Published var raveModels: [String] = []
+    @Published var currentRaveModel: String = "percussion"
     
     private let synthesisEngine: SynthesisEngine
     private let sampleLibrary: SampleLibrary
@@ -144,6 +146,35 @@ class GenerationController: ObservableObject {
             raveStatus = "Running"
         case .error(let msg):
             raveStatus = "Error: \(msg)"
+        }
+    }
+    
+    /// Refreshes the list of available RAVE models
+    func refreshRAVEModels() {
+        raveModels = synthesisEngine.getAvailableRAVEModels()
+        if let current = synthesisEngine.getCurrentRAVEModel() {
+            currentRaveModel = current
+        }
+    }
+    
+    /// Switches to a different RAVE model
+    func switchRAVEModel(to model: String) async {
+        await MainActor.run {
+            raveStatus = "Switching to \(model)..."
+        }
+        
+        do {
+            try await synthesisEngine.switchRAVEModel(to: model)
+            
+            await MainActor.run {
+                currentRaveModel = model
+                raveStatus = "Running (\(model))"
+                raveStyles = synthesisEngine.getRAVEStyles()
+            }
+        } catch {
+            await MainActor.run {
+                raveStatus = "Error: \(error.localizedDescription)"
+            }
         }
     }
     

@@ -224,6 +224,22 @@ class SynthesisEngine {
         return raveSynthesizer?.serverStatus ?? .idle
     }
     
+    /// Gets available RAVE models
+    func getAvailableRAVEModels() -> [String] {
+        return RAVESynthesizer.getAvailableModels()
+    }
+    
+    /// Gets current RAVE model name
+    func getCurrentRAVEModel() -> String? {
+        return raveSynthesizer?.currentModel
+    }
+    
+    /// Switches RAVE to a different model
+    func switchRAVEModel(to model: String) async throws {
+        guard let rave = raveSynthesizer else { return }
+        try await rave.switchModel(to: model)
+    }
+    
     // MARK: - Playback Control
     
     /// Starts synthesis with current backend

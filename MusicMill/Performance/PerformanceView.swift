@@ -106,6 +106,25 @@ struct PerformanceView: View {
                     
                     // RAVE Status (when RAVE is selected)
                     if generationController.backend == .rave || generationController.backend == .hybrid {
+                        // Model selector
+                        if !generationController.raveModels.isEmpty {
+                            HStack {
+                                Text("Model:")
+                                    .font(.caption)
+                                Picker("", selection: $generationController.currentRaveModel) {
+                                    ForEach(generationController.raveModels, id: \.self) { model in
+                                        Text(model).tag(model)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .onChange(of: generationController.currentRaveModel) { _, newModel in
+                                    Task {
+                                        await generationController.switchRAVEModel(to: newModel)
+                                    }
+                                }
+                            }
+                        }
+                        
                         HStack {
                             Circle()
                                 .fill(raveStatusColor)
@@ -125,7 +144,7 @@ struct PerformanceView: View {
                                     .font(.caption)
                             }
                             .buttonStyle(.bordered)
-                            .disabled(generationController.raveStatus == "Running" || generationController.raveStatus.hasPrefix("Starting"))
+                            .disabled(generationController.raveStatus == "Running" || generationController.raveStatus.hasPrefix("Starting") || generationController.raveStatus.hasPrefix("Switching"))
                         }
                         
                         // RAVE Style selector
@@ -275,6 +294,9 @@ struct PerformanceView: View {
         if let model = modelManager.currentModel {
             trackSelector.setModel(model)
         }
+        
+        // Refresh available RAVE models
+        generationController.refreshRAVEModels()
         
         // Load samples from analysis if not already loaded
         if !hasLoadedSamples {

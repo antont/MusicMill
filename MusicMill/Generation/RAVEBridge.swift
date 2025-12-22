@@ -85,8 +85,8 @@ class RAVEBridge {
     // MARK: - Properties
     
     private let socketPath: String
-    private let modelName: String
-    private let anchorsPath: String?
+    private(set) var modelName: String
+    private var anchorsPath: String?
     
     private var serverProcess: Process?
     private var socket: Int32 = -1
@@ -137,6 +137,38 @@ class RAVEBridge {
     
     deinit {
         stop()
+    }
+    
+    // MARK: - Model Discovery
+    
+    /// Gets list of available RAVE models from the pretrained directory
+    static func getAvailableModels() -> [String] {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let pretrainedDir = documentsURL.appendingPathComponent("MusicMill/RAVE/pretrained")
+        
+        guard let files = try? FileManager.default.contentsOfDirectory(at: pretrainedDir, includingPropertiesForKeys: nil) else {
+            return []
+        }
+        
+        return files
+            .filter { $0.pathExtension == "ts" }
+            .map { $0.deletingPathExtension().lastPathComponent }
+            .sorted()
+    }
+    
+    /// Switches to a different RAVE model (restarts server)
+    func switchModel(to newModel: String) async throws {
+        // Stop current server
+        stop()
+        
+        // Update model name
+        modelName = newModel
+        
+        // Clear buffers
+        clearBuffer()
+        
+        // Start with new model
+        try await start()
     }
     
     // MARK: - Server Lifecycle
