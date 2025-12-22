@@ -59,6 +59,10 @@ class RAVEController:
         self.target_latent = None
         self.interpolation_rate = 0.1
         
+        # Temporal state for continuous generation
+        self.time_phase = 0.0  # Accumulated time for continuity
+        self.variation_amount = 0.5  # How much random variation to add
+        
         # Lock for thread-safe access
         self.lock = Lock()
         
@@ -150,6 +154,9 @@ class RAVEController:
             variation: 0.0-1.0, adds random variation to latent
         """
         with self.lock:
+            # Store variation amount for temporal evolution
+            self.variation_amount = max(0.1, min(1.0, variation))
+            
             # Start with zero latent
             new_latent = torch.zeros(self.latent_dim, device=self.device)
             
@@ -177,6 +184,8 @@ class RAVEController:
         """
         Generate audio chunk with current controls.
         
+        Uses temporal evolution to create varied, continuous audio across chunks.
+        
         Args:
             num_frames: Number of latent frames to generate
             tempo_factor: Time-stretch factor (>1 = faster, <1 = slower)
@@ -185,19 +194,34 @@ class RAVEController:
             Audio samples as numpy array
         """
         with self.lock:
-            # Interpolate current toward target
+            # Interpolate current toward target (for style transitions)
             self.current_latent = (
                 self.current_latent + 
                 (self.target_latent - self.current_latent) * self.interpolation_rate
             )
-            current = self.current_latent.clone()
+            base_latent = self.current_latent.clone()
+            variation = self.variation_amount
+            start_phase = self.time_phase
         
-        # Create latent sequence with slight variation
-        z = current.unsqueeze(0).unsqueeze(-1).expand(-1, -1, num_frames)
+        # Generate latent sequence - similar to direct generation but with style control
+        # The key insight: direct generation uses random z for each frame, which creates variety
         
-        # Add temporal variation for more interesting output
-        temporal_noise = torch.randn_like(z) * 0.1
-        z = z + temporal_noise
+        # Start with random latent for full variety (like direct generation)
+        z = torch.randn(1, self.latent_dim, num_frames, device=self.device)
+        
+        # Blend toward the target style (base_latent) based on variation setting
+        # variation=0 -> pure style, variation=1 -> pure random
+        style_weight = 1.0 - variation
+        if style_weight > 0:
+            style_expanded = base_latent.unsqueeze(0).unsqueeze(-1).expand(-1, -1, num_frames)
+            z = z * variation + style_expanded * style_weight
+        
+        # Scale by energy-based magnitude
+        z = z * (0.5 + variation * 0.5)
+        
+        # Update phase for next chunk (ensures continuity)
+        with self.lock:
+            self.time_phase = start_phase + num_frames
         
         # Apply tempo by interpolating along time axis
         if tempo_factor != 1.0:
@@ -276,11 +300,18 @@ def run_server(controller: RAVEController, socket_path: str = SOCKET_PATH):
 def handle_connection(conn: socket.socket, controller: RAVEController):
     """Handle a client connection with streaming audio."""
     buffer = b""
+    request_count = 0
     
     while True:
         # Read until we get a null-terminated JSON message
-        data = conn.recv(4096)
+        try:
+            data = conn.recv(4096)
+        except Exception as e:
+            print(f"    Recv error: {e}")
+            break
+            
         if not data:
+            print(f"    Connection closed by client after {request_count} requests")
             break
         
         buffer += data
@@ -291,6 +322,8 @@ def handle_connection(conn: socket.socket, controller: RAVEController):
             
             try:
                 request = json.loads(message.decode('utf-8'))
+                request_count += 1
+                
                 response = process_request(request, controller)
                 
                 if response is not None:
@@ -300,6 +333,8 @@ def handle_connection(conn: socket.socket, controller: RAVEController):
                         audio_bytes = response.astype(np.float32).tobytes()
                         conn.sendall(struct.pack('I', len(audio_bytes)))
                         conn.sendall(audio_bytes)
+                        if request_count <= 5 or request_count % 10 == 0:
+                            print(f"    Request #{request_count}: sent {len(audio_bytes)} bytes")
                     else:
                         # JSON response
                         json_bytes = json.dumps(response).encode('utf-8') + b'\0'
@@ -308,7 +343,9 @@ def handle_connection(conn: socket.socket, controller: RAVEController):
             except json.JSONDecodeError as e:
                 print(f"    Invalid JSON: {e}")
             except Exception as e:
-                print(f"    Request error: {e}")
+                print(f"    Request error #{request_count}: {e}")
+                import traceback
+                traceback.print_exc()
 
 
 def process_request(request: dict, controller: RAVEController):

@@ -370,6 +370,15 @@ class RAVEBridge {
         setStatus(.idle)
     }
     
+    /// Resets the socket connection (for error recovery)
+    func resetConnection() {
+        if socket >= 0 {
+            Darwin.close(socket)
+            socket = -1
+        }
+        print("RAVEBridge: Connection reset")
+    }
+    
     /// Checks if server is running by attempting to connect
     private func isServerRunning() -> Bool {
         guard FileManager.default.fileExists(atPath: socketPath) else {

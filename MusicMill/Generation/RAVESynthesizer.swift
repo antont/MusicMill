@@ -278,25 +278,39 @@ class RAVESynthesizer {
         bufferFillTask = Task { [weak self] in
             guard let self = self else { return }
             var fillCount = 0
+            var errorCount = 0
             
             while !Task.isCancelled && self.isPlaying {
+                let buffered = self.bridge.bufferedSamples
+                
                 // Check if buffer needs filling
-                if self.bridge.bufferedSamples < self.minBufferedSamples {
+                if buffered < self.minBufferedSamples {
                     do {
                         let controls = self.getCurrentControls()
                         try await self.bridge.fillBuffer(controls: controls)
                         fillCount += 1
-                        if fillCount <= 3 {
-                            print("RAVESynthesizer: Buffer filled (\(fillCount)), buffered: \(self.bridge.bufferedSamples)")
-                        }
+                        errorCount = 0  // Reset error count on success
+                        
+                        let newBuffered = self.bridge.bufferedSamples
+                        print("RAVESynthesizer: Buffer fill #\(fillCount): \(buffered) -> \(newBuffered) samples")
                     } catch {
-                        print("RAVESynthesizer: Buffer fill error: \(error)")
+                        errorCount += 1
+                        print("RAVESynthesizer: Buffer fill error #\(errorCount): \(error)")
+                        
+                        // If we get repeated errors, try reconnecting
+                        if errorCount >= 3 {
+                            print("RAVESynthesizer: Too many errors, resetting connection...")
+                            self.bridge.resetConnection()
+                            errorCount = 0
+                            try? await Task.sleep(nanoseconds: 500_000_000)  // Wait 500ms before retry
+                        }
                     }
                 }
                 
                 // Small delay to prevent tight loop
-                try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
             }
+            print("RAVESynthesizer: Buffer fill loop ended")
         }
     }
     
