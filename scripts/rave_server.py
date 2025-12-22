@@ -317,7 +317,8 @@ class RAVEController:
             self.lfo_phase = 0.0
     
     def style_transfer(self, audio_input: np.ndarray, 
-                        noise_excitation: float = 0.5) -> np.ndarray:
+                        noise_excitation: float = 0.5,
+                        noise_gate_threshold: float = 0.01) -> np.ndarray:
         """
         Style transfer: encode input audio and decode through model.
         
@@ -331,16 +332,28 @@ class RAVEController:
         Args:
             audio_input: Input audio as numpy float32 array (mono, 48kHz expected)
             noise_excitation: Amount of noise to blend (0-1). Higher = more RAVE response.
+            noise_gate_threshold: RMS level below which output is silenced.
         
         Returns:
             Transformed audio as numpy float32 array
         """
         from scipy.ndimage import uniform_filter1d
         
+        # Compute input RMS for noise gate
+        input_rms = np.sqrt(np.mean(audio_input ** 2))
+        
+        # NOISE GATE: If input is too quiet, return silence
+        if input_rms < noise_gate_threshold:
+            return np.zeros_like(audio_input)
+        
         # Compute input envelope for noise modulation
         envelope = np.abs(audio_input)
         envelope = uniform_filter1d(envelope, size=1024)
-        envelope = envelope / (envelope.max() + 1e-6)
+        max_env = envelope.max()
+        if max_env > 0.001:
+            envelope = envelope / max_env
+        else:
+            envelope = np.zeros_like(envelope)
         
         # Normalize input level
         max_val = np.abs(audio_input).max()
@@ -349,7 +362,7 @@ class RAVEController:
         
         # KEY: Add envelope-modulated noise to help RAVE respond
         # Without this, clean voice signals get attenuated!
-        if noise_excitation > 0:
+        if noise_excitation > 0 and max_env > 0.001:
             noise = np.random.randn(len(audio_input)).astype(np.float32)
             # Noise is modulated by envelope - only active where input has energy
             modulated_noise = noise * envelope * noise_excitation * 0.8
