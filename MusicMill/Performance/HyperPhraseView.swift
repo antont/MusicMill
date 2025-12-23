@@ -219,34 +219,28 @@ struct HyperPhraseView: View {
         VStack(spacing: 0) {
             // Track name header
             if let current = player.currentPhrase {
-                Text(current.sourceTrackName)
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 8)
+                HStack {
+                    Text("Now playing:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text(current.sourceTrackName)
+                        .font(.headline)
+                }
+                .padding(.vertical, 8)
             }
             
-            // Main timeline area
-            GeometryReader { geometry in
-                let trackPhrases = player.getCurrentTrackPhrases()
-                let currentIndex = trackPhrases.firstIndex(where: { $0.id == player.currentPhrase?.id }) ?? 0
-                
-                ScrollViewReader { scrollProxy in
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        ZStack(alignment: .top) {
-                            // Track strip (horizontal timeline)
-                            trackStrip(phrases: trackPhrases, currentIndex: currentIndex, geometry: geometry)
-                            
-                            // Branch options at each phrase boundary
-                            branchOverlays(phrases: trackPhrases, currentIndex: currentIndex, geometry: geometry)
-                        }
-                        .frame(minWidth: geometry.size.width)
-                    }
-                    .onChange(of: player.currentPhrase?.id) { _, newId in
-                        // Auto-scroll to current phrase
-                        if let id = newId {
-                            withAnimation {
-                                scrollProxy.scrollTo(id, anchor: .center)
-                            }
+            Divider()
+            
+            // Main timeline with branches
+            ScrollViewReader { scrollProxy in
+                ScrollView(.horizontal, showsIndicators: true) {
+                    timelineContent
+                        .padding(.vertical, 20)
+                }
+                .onChange(of: player.currentPhrase?.id) { _, newId in
+                    if let id = newId {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            scrollProxy.scrollTo(id, anchor: .leading)
                         }
                     }
                 }
@@ -254,111 +248,136 @@ struct HyperPhraseView: View {
         }
     }
     
-    /// The horizontal track strip showing all phrases in the current song
-    private func trackStrip(phrases: [PhraseNode], currentIndex: Int, geometry: GeometryProxy) -> some View {
-        let phraseWidth: CGFloat = 160
-        let phraseHeight: CGFloat = 80
-        let stripY = geometry.size.height / 2
+    /// The timeline content: track strip + branch options
+    private var timelineContent: some View {
+        let trackPhrases = player.getCurrentTrackPhrases()
+        let currentIndex = trackPhrases.firstIndex(where: { $0.id == player.currentPhrase?.id }) ?? 0
         
-        return HStack(spacing: 0) {
-            ForEach(Array(phrases.enumerated()), id: \.element.id) { index, phrase in
-                let isCurrent = index == currentIndex
-                let isPast = index < currentIndex
-                
-                // Phrase box in the strip
-                VStack(spacing: 2) {
-                    // Segment type badge
-                    Text(phrase.segmentType)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(segmentColor(phrase.segmentType).opacity(0.3))
-                        .foregroundColor(segmentColor(phrase.segmentType))
-                        .cornerRadius(4)
-                    
-                    // Tempo
-                    Text("\(phrase.bpm) BPM")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    
-                    // Energy bar
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.gray.opacity(0.3))
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(energyGradient)
-                                .frame(width: geo.size.width * CGFloat(phrase.energy))
-                        }
-                    }
-                    .frame(height: 4)
-                }
-                .frame(width: phraseWidth - 4, height: phraseHeight - 8)
-                .padding(2)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(isCurrent ? Color.accentColor.opacity(0.3) : (isPast ? Color.gray.opacity(0.1) : Color(NSColor.controlBackgroundColor)))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isCurrent ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: isCurrent ? 2 : 1)
-                )
-                .opacity(isPast ? 0.5 : 1.0)
-                .id(phrase.id)
-                .onTapGesture {
-                    if !isCurrent {
-                        transitionTo(phrase)
-                    }
+        return VStack(spacing: 0) {
+            // Upper branches area
+            HStack(alignment: .bottom, spacing: 0) {
+                ForEach(Array(trackPhrases.enumerated()), id: \.element.id) { index, phrase in
+                    upperBranches(for: phrase, phraseIndex: index, currentIndex: currentIndex)
+                        .frame(width: 160)
                 }
             }
+            .frame(height: 120)
+            
+            // Main track strip
+            HStack(spacing: 2) {
+                ForEach(Array(trackPhrases.enumerated()), id: \.element.id) { index, phrase in
+                    phraseBox(phrase: phrase, index: index, currentIndex: currentIndex)
+                        .id(phrase.id)
+                }
+            }
+            .padding(.horizontal, 20)
+            
+            // Lower branches area
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(Array(trackPhrases.enumerated()), id: \.element.id) { index, phrase in
+                    lowerBranches(for: phrase, phraseIndex: index, currentIndex: currentIndex)
+                        .frame(width: 160)
+                }
+            }
+            .frame(height: 120)
         }
-        .padding(.horizontal, 20)
-        .frame(height: phraseHeight)
-        .position(x: CGFloat(phrases.count) * phraseWidth / 2 + 20, y: stripY)
     }
     
-    /// Branch options that fan out from phrase boundaries
-    private func branchOverlays(phrases: [PhraseNode], currentIndex: Int, geometry: GeometryProxy) -> some View {
-        let phraseWidth: CGFloat = 160
-        let stripY = geometry.size.height / 2
+    /// Single phrase box in the track strip
+    private func phraseBox(phrase: PhraseNode, index: Int, currentIndex: Int) -> some View {
+        let isCurrent = index == currentIndex
+        let isPast = index < currentIndex
         
-        return ForEach(Array(phrases.enumerated()), id: \.element.id) { index, phrase in
-            // Only show branches for current and next few phrases
-            if index >= currentIndex && index <= currentIndex + 2 {
-                let branches = player.getBranchOptions(for: phrase, limit: 4)
-                let xPos = CGFloat(index) * phraseWidth + phraseWidth + 20  // At end of phrase
-                
-                // Branch lines and nodes
-                ForEach(Array(branches.enumerated()), id: \.element.id) { branchIndex, branchPhrase in
-                    let yOffset = branchYOffset(index: branchIndex, total: branches.count)
-                    let branchY = stripY + yOffset
-                    
-                    // Connection line
-                    Path { path in
-                        path.move(to: CGPoint(x: xPos - phraseWidth/2, y: stripY))
-                        path.addQuadCurve(
-                            to: CGPoint(x: xPos + 60, y: branchY),
-                            control: CGPoint(x: xPos, y: (stripY + branchY) / 2)
-                        )
-                    }
-                    .stroke(Color.green.opacity(0.4), lineWidth: 2)
-                    
-                    // Branch phrase card (compact)
-                    CompactPhraseCard(phrase: branchPhrase, isQueued: player.nextPhrase?.id == branchPhrase.id)
-                        .position(x: xPos + 100, y: branchY)
-                        .onTapGesture {
-                            transitionTo(branchPhrase)
-                        }
-                }
+        return VStack(spacing: 4) {
+            // Segment type badge
+            Text(phrase.segmentType)
+                .font(.caption)
+                .fontWeight(.medium)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(segmentColor(phrase.segmentType).opacity(0.3))
+                .foregroundColor(segmentColor(phrase.segmentType))
+                .cornerRadius(4)
+            
+            // Tempo
+            Text("\(phrase.bpm) BPM")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            // Energy bar
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(energyGradient)
+                    .frame(width: 100 * CGFloat(phrase.energy), height: 6)
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 100 * CGFloat(1 - phrase.energy), height: 6)
+            }
+            .cornerRadius(3)
+        }
+        .frame(width: 156, height: 70)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isCurrent ? Color.accentColor.opacity(0.25) : (isPast ? Color.gray.opacity(0.1) : Color(NSColor.controlBackgroundColor)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isCurrent ? Color.accentColor : Color.gray.opacity(0.4), lineWidth: isCurrent ? 3 : 1)
+        )
+        .opacity(isPast ? 0.5 : 1.0)
+        .onTapGesture {
+            if !isCurrent {
+                transitionTo(phrase)
             }
         }
     }
     
-    /// Calculate Y offset for branch options (spread above and below the track)
-    private func branchYOffset(index: Int, total: Int) -> CGFloat {
-        let spacing: CGFloat = 70
-        let centerOffset = CGFloat(total - 1) / 2.0
-        return (CGFloat(index) - centerOffset) * spacing
+    /// Upper branch options (odd-indexed branches)
+    private func upperBranches(for phrase: PhraseNode, phraseIndex: Int, currentIndex: Int) -> some View {
+        let showBranches = phraseIndex >= currentIndex && phraseIndex <= currentIndex + 1
+        let branches = showBranches ? player.getBranchOptions(for: phrase, limit: 4) : []
+        let upperBranches = branches.enumerated().filter { $0.offset % 2 == 0 }.map { $0.element }
+        
+        return VStack(spacing: 4) {
+            Spacer()
+            ForEach(upperBranches, id: \.id) { branchPhrase in
+                CompactPhraseCard(phrase: branchPhrase, isQueued: player.nextPhrase?.id == branchPhrase.id)
+                    .onTapGesture {
+                        transitionTo(branchPhrase)
+                    }
+            }
+            
+            // Connection line indicator
+            if !upperBranches.isEmpty {
+                Rectangle()
+                    .fill(Color.green.opacity(0.5))
+                    .frame(width: 2, height: 20)
+            }
+        }
+    }
+    
+    /// Lower branch options (even-indexed branches)
+    private func lowerBranches(for phrase: PhraseNode, phraseIndex: Int, currentIndex: Int) -> some View {
+        let showBranches = phraseIndex >= currentIndex && phraseIndex <= currentIndex + 1
+        let branches = showBranches ? player.getBranchOptions(for: phrase, limit: 4) : []
+        let lowerBranches = branches.enumerated().filter { $0.offset % 2 == 1 }.map { $0.element }
+        
+        return VStack(spacing: 4) {
+            // Connection line indicator
+            if !lowerBranches.isEmpty {
+                Rectangle()
+                    .fill(Color.green.opacity(0.5))
+                    .frame(width: 2, height: 20)
+            }
+            
+            ForEach(lowerBranches, id: \.id) { branchPhrase in
+                CompactPhraseCard(phrase: branchPhrase, isQueued: player.nextPhrase?.id == branchPhrase.id)
+                    .onTapGesture {
+                        transitionTo(branchPhrase)
+                    }
+            }
+            Spacer()
+        }
     }
     
     private func segmentColor(_ type: String) -> Color {
@@ -572,7 +591,7 @@ struct CompactPhraseCard: View {
     var isQueued: Bool = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             // Track name (truncated)
             Text(phrase.sourceTrackName)
                 .font(.caption2)
@@ -584,26 +603,29 @@ struct CompactPhraseCard: View {
                 Text(phrase.segmentType)
                     .font(.system(size: 9))
                     .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
+                    .padding(.vertical, 2)
                     .background(segmentColor.opacity(0.3))
                     .foregroundColor(segmentColor)
                     .cornerRadius(3)
                 
+                Spacer()
+                
                 // BPM
                 Text("\(phrase.bpm)")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.secondary)
             }
         }
-        .padding(6)
-        .frame(width: 120)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(width: 140)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color(NSColor.controlBackgroundColor))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isQueued ? Color.green : Color.green.opacity(0.3), lineWidth: isQueued ? 2 : 1)
+                .stroke(isQueued ? Color.green : Color.green.opacity(0.4), lineWidth: isQueued ? 2 : 1)
         )
     }
     
