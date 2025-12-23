@@ -76,13 +76,19 @@ def convert_to_wav(input_path: Path, duration: float = 30) -> Path:
     """Convert audio file to WAV for MusicGen"""
     output_path = Path('/tmp') / f'musicgen_ref_{hash(str(input_path)) % 10000}.wav'
     
-    subprocess.run([
+    result = subprocess.run([
         'ffmpeg', '-y', '-i', str(input_path),
         '-ar', str(SAMPLE_RATE),
         '-ac', '1',
-        '-t', str(duration),  # Use first N seconds as reference
+        '-t', str(duration),
         str(output_path)
-    ], capture_output=True)
+    ], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed for {input_path.name}: {result.stderr[:200]}")
+    
+    if not output_path.exists():
+        raise RuntimeError(f"ffmpeg output file missing: {output_path}")
     
     return output_path
 
@@ -392,6 +398,21 @@ def main():
         if not args.reference:
             print("Error: --quick requires --reference")
             sys.exit(1)
+        
+        # Handle "random" keyword
+        if args.reference.lower() == 'random':
+            tracks = find_reference_tracks(DJ_COLLECTION)
+            if not tracks:
+                print("Error: No tracks found in DJ collection")
+                sys.exit(1)
+            reference_path = random.choice(tracks)
+            print(f"Selected random reference: {reference_path.name}")
+        else:
+            reference_path = Path(args.reference)
+            if not reference_path.exists():
+                print(f"Error: Reference file not found: {reference_path}")
+                sys.exit(1)
+        
         prompt = args.prompt or random.choice(STYLE_PROMPTS)
         
         device = 'mps' if torch.backends.mps.is_available() else 'cpu'
@@ -400,7 +421,7 @@ def main():
         
         output = generate_track(
             model, prompt, 
-            Path(args.reference), 
+            reference_path, 
             args.duration, 
             OUTPUT_DIR
         )
