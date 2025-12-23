@@ -65,7 +65,7 @@ class SynthesisEngine {
     // MARK: - Backend Management
     
     /// Gets or creates the phrase player
-    private func getPhrasePlayer() -> PhrasePlayer {
+    func getPhrasePlayer() -> PhrasePlayer {
         if phrasePlayer == nil {
             phrasePlayer = PhrasePlayer()
         }
@@ -73,7 +73,7 @@ class SynthesisEngine {
     }
     
     /// Gets or creates the granular synthesizer
-    private func getGranularSynthesizer() -> GranularSynthesizer {
+    func getGranularSynthesizer() -> GranularSynthesizer {
         if granularSynthesizer == nil {
             granularSynthesizer = GranularSynthesizer()
         }
@@ -342,11 +342,6 @@ class SynthesisEngine {
         if loadedCount == 0 {
             throw SynthesisError.noSamplesLoaded
         }
-    }
-    
-    /// Gets phrase player for direct access
-    func getPhrasePlayerForUI() -> PhrasePlayer {
-        return getPhrasePlayer()
     }
     
     /// Starts RAVE server

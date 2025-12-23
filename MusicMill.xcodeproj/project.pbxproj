@@ -21,6 +21,8 @@
 		35AACBB82EF704C7003DAD74 /* FeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */; };
 		35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB902EF704C7003DAD74 /* MusicMillApp.swift */; };
 		35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA02EF704C7003DAD74 /* PerformanceView.swift */; };
+		PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */; };
+		GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */; };
 		35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */; };
 		35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */; };
 		A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */; };
@@ -73,6 +75,8 @@
 		35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTrainer.swift; sourceTree = "<group>"; };
 		35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixingEngine.swift; sourceTree = "<group>"; };
 		35AACBA02EF704C7003DAD74 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
+		PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePerformanceView.swift; sourceTree = "<group>"; };
+		GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularPerformanceView.swift; sourceTree = "<group>"; };
 		35AACBA12EF704C7003DAD74 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		35AACBA22EF704C7003DAD74 /* StyleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleController.swift; sourceTree = "<group>"; };
 		35AACBA32EF704C7003DAD74 /* TrackSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSelector.swift; sourceTree = "<group>"; };
@@ -235,6 +239,8 @@
 			children = (
 				35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */,
 				35AACBA02EF704C7003DAD74 /* PerformanceView.swift */,
+				PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */,
+				GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */,
 				35AACBA12EF704C7003DAD74 /* PlaybackController.swift */,
 				35AACBA22EF704C7003DAD74 /* StyleController.swift */,
 				35AACBA32EF704C7003DAD74 /* TrackSelector.swift */,
@@ -481,6 +487,8 @@
 				35AACBB82EF704C7003DAD74 /* FeatureExtractor.swift in Sources */,
 				35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */,
 				35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */,
+				PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */,
+				GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */,
 				35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */,
 				35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */,
 							A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */,

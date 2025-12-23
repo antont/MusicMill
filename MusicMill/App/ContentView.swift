@@ -6,15 +6,15 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            TrainingView()
+            PhrasePerformanceView()
                 .tabItem {
-                    Label("Training", systemImage: "brain")
+                    Label("Phrase", systemImage: "music.note.list")
                 }
                 .tag(0)
             
-            PerformanceView()
+            GranularPerformanceView()
                 .tabItem {
-                    Label("Performance", systemImage: "music.note")
+                    Label("Granular", systemImage: "waveform.path")
                 }
                 .tag(1)
             
@@ -23,8 +23,13 @@ struct ContentView: View {
                     Label("RAVE", systemImage: "waveform")
                 }
                 .tag(2)
+            
+            TrainingView()
+                .tabItem {
+                    Label("Training", systemImage: "brain")
+                }
+                .tag(3)
         }
-        .frame(minWidth: 1200, minHeight: 800)
+        .frame(minWidth: 900, minHeight: 600)
     }
 }
-
