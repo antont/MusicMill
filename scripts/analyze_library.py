@@ -158,52 +158,114 @@ def detect_phrases_and_segments(y, sr, beat_times, rms, rms_times) -> tuple:
     """
     Detect phrase boundaries and classify segments.
     
-    Uses novelty detection based on spectral changes and energy.
-    """
-    # Compute novelty function using spectral flux
-    S = np.abs(librosa.stft(y, hop_length=HOP_LENGTH))
+    Uses bar-based segmentation (8 bars = typical phrase) combined with
+    novelty detection to snap to structural boundaries.
     
-    # Spectral flux (onset strength envelope)
+    Target: 8-30 second phrases for DJ-style navigation.
+    """
+    duration = len(y) / sr
+    
+    # === Bar-based phrase boundaries ===
+    # Use downbeats (every 4 beats) and group into 8-bar phrases
+    # 8 bars at 130 BPM = ~14.8 seconds (good phrase length)
+    
+    if len(beat_times) >= 4:
+        downbeats = beat_times[::4]  # Every 4th beat = bar start
+    else:
+        downbeats = beat_times if len(beat_times) > 0 else np.array([0.0])
+    
+    # Choose phrase grouping based on tempo
+    # Faster tempo = more bars per phrase to maintain ~10-20s segments
+    if len(beat_times) >= 8:
+        avg_beat_interval = np.mean(np.diff(beat_times))
+        tempo_estimate = 60.0 / avg_beat_interval if avg_beat_interval > 0 else 120.0
+        
+        if tempo_estimate > 150:
+            bars_per_phrase = 16  # Fast tempo: 16 bars
+        elif tempo_estimate > 120:
+            bars_per_phrase = 8   # Medium tempo: 8 bars
+        else:
+            bars_per_phrase = 8   # Slow tempo: 8 bars (still want variety)
+    else:
+        bars_per_phrase = 8
+    
+    # Create phrase boundaries at every N bars
+    phrase_downbeats = downbeats[::bars_per_phrase]
+    
+    # === Novelty detection for refinement ===
+    # Use spectral flux to detect structural changes
     onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP_LENGTH)
     
-    # Smooth onset envelope for phrase detection (longer window)
-    phrase_window = int(4.0 * sr / HOP_LENGTH)  # 4 second window
-    if phrase_window > 1:
-        onset_smooth = np.convolve(onset_env, np.ones(phrase_window)/phrase_window, mode='same')
+    # Smooth for structure detection
+    struct_window = int(2.0 * sr / HOP_LENGTH)  # 2 second window
+    if struct_window > 1 and len(onset_env) > struct_window:
+        onset_smooth = np.convolve(onset_env, np.ones(struct_window)/struct_window, mode='same')
     else:
         onset_smooth = onset_env
     
-    # Find local minima in smoothed onset strength (phrase boundaries)
-    # These are "quiet" moments between musical phrases
-    phrase_frames = []
-    min_phrase_length = int(4.0 * sr / HOP_LENGTH)  # Minimum 4 seconds between phrases
+    # Find peaks in novelty (major structural transitions)
+    novelty_peaks = []
+    peak_threshold = np.mean(onset_smooth) + 1.5 * np.std(onset_smooth)
+    min_peak_distance = int(4.0 * sr / HOP_LENGTH)  # At least 4 seconds apart
     
-    for i in range(min_phrase_length, len(onset_smooth) - min_phrase_length, min_phrase_length // 2):
-        window = onset_smooth[i - min_phrase_length//4 : i + min_phrase_length//4]
-        if len(window) > 0 and onset_smooth[i] == np.min(window):
-            # Check if this is near a beat (prefer phrase boundaries on beats)
-            frame_time = librosa.frames_to_time(i, sr=sr, hop_length=HOP_LENGTH)
-            
-            # Find nearest beat
-            if len(beat_times) > 0:
-                nearest_beat_idx = np.argmin(np.abs(beat_times - frame_time))
-                nearest_beat = beat_times[nearest_beat_idx]
-                if abs(nearest_beat - frame_time) < 0.5:  # Within 0.5s of a beat
-                    phrase_frames.append(librosa.time_to_frames(nearest_beat, sr=sr, hop_length=HOP_LENGTH))
+    last_peak = -min_peak_distance
+    for i in range(min_peak_distance, len(onset_smooth) - min_peak_distance):
+        if onset_smooth[i] > peak_threshold:
+            if i - last_peak >= min_peak_distance:
+                # Check if local maximum
+                window = onset_smooth[max(0, i-10):min(len(onset_smooth), i+10)]
+                if len(window) > 0 and onset_smooth[i] >= np.max(window) * 0.95:
+                    novelty_peaks.append(librosa.frames_to_time(i, sr=sr, hop_length=HOP_LENGTH))
+                    last_peak = i
+    
+    # === Merge bar boundaries with novelty peaks ===
+    all_boundaries = set(phrase_downbeats.tolist())
+    
+    # Add novelty peaks that aren't too close to existing boundaries
+    for peak_time in novelty_peaks:
+        if all(abs(peak_time - b) > 2.0 for b in all_boundaries):  # At least 2s apart
+            # Snap to nearest downbeat if close
+            if len(downbeats) > 0:
+                nearest_idx = np.argmin(np.abs(downbeats - peak_time))
+                nearest_downbeat = downbeats[nearest_idx]
+                if abs(nearest_downbeat - peak_time) < 1.0:
+                    all_boundaries.add(nearest_downbeat)
                 else:
-                    phrase_frames.append(i)
+                    all_boundaries.add(peak_time)
             else:
-                phrase_frames.append(i)
+                all_boundaries.add(peak_time)
     
-    phrase_times = librosa.frames_to_time(phrase_frames, sr=sr, hop_length=HOP_LENGTH)
-    phrase_times = sorted(set(phrase_times.tolist()))  # Remove duplicates
+    # Sort and ensure start/end
+    phrase_times = sorted(all_boundaries)
     
-    # Add start and end times
-    duration = len(y) / sr
-    if len(phrase_times) == 0 or phrase_times[0] > 1.0:
+    # Add start if needed
+    if len(phrase_times) == 0 or phrase_times[0] > 2.0:
         phrase_times = [0.0] + phrase_times
-    if phrase_times[-1] < duration - 1.0:
+    
+    # Add end if needed
+    if phrase_times[-1] < duration - 2.0:
         phrase_times.append(duration)
+    
+    # === Post-process: split any segments > 30s ===
+    final_phrase_times = []
+    for i in range(len(phrase_times)):
+        final_phrase_times.append(phrase_times[i])
+        
+        if i < len(phrase_times) - 1:
+            gap = phrase_times[i + 1] - phrase_times[i]
+            if gap > 30.0:
+                # Insert intermediate boundaries
+                num_splits = int(gap / 15.0)  # Target ~15s segments
+                for j in range(1, num_splits):
+                    split_time = phrase_times[i] + gap * j / num_splits
+                    # Snap to nearest downbeat
+                    if len(downbeats) > 0:
+                        nearest_idx = np.argmin(np.abs(downbeats - split_time))
+                        if abs(downbeats[nearest_idx] - split_time) < 2.0:
+                            split_time = downbeats[nearest_idx]
+                    final_phrase_times.append(split_time)
+    
+    phrase_times = sorted(set(final_phrase_times))
     
     # === Segment Classification ===
     segments = []
