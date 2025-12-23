@@ -42,7 +42,8 @@ set_efficient_attention_backend('torch')
 from audiocraft.models import MusicGen
 
 # Configuration
-DJ_COLLECTION = Path.home() / "Music/PioneerDJ"
+# Only use actual imported music, not samples/demos
+DJ_COLLECTION = Path.home() / "Music/PioneerDJ/Imported from Device/Contents"
 OUTPUT_DIR = Path.home() / "Documents/MusicMill/Generated"
 SAMPLE_RATE = 32000
 
