@@ -12,6 +12,7 @@
 		35AACBAE2EF704C7003DAD74 /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9C2EF704C7003DAD74 /* ModelManager.swift */; };
 		35AACBAF2EF704C7003DAD74 /* TrainingDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */; };
 		636630666630666161366463 /* AnalysisStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 303738666235333938653064 /* AnalysisStorage.swift */; };
+		PHRASEDB001002EF704C7003D /* PhraseDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */; };
 		35AACBB02EF704C7003DAD74 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA52EF704C7003DAD74 /* TrainingView.swift */; };
 		35AACBB12EF704C7003DAD74 /* StyleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA22EF704C7003DAD74 /* StyleController.swift */; };
 		35AACBB22EF704C7003DAD74 /* AudioAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */; };
@@ -22,6 +23,7 @@
 		35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB902EF704C7003DAD74 /* MusicMillApp.swift */; };
 		35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA02EF704C7003DAD74 /* PerformanceView.swift */; };
 		PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */; };
+		HYPER002BUILD00000000001 /* HyperPhraseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER002FREF00000000001 /* HyperPhraseView.swift */; };
 		GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */; };
 		35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */; };
 		35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */; };
@@ -33,6 +35,8 @@
 		615522429CA5A1392DD0C831 /* GenerationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90CE387D266B165E2B7F55D7 /* GenerationController.swift */; };
 		49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */; };
 		PHRASE002BUILD00000000001 /* PhrasePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001FREF00000000001 /* PhrasePlayer.swift */; };
+		TRANS001BUILD00000000001 /* TransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = TRANS001FREF00000000001 /* TransitionEngine.swift */; };
+		HYPER001BUILD00000000001 /* HyperPhrasePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */; };
 		CONCAT002BUILD00000000001 /* ConcatenativeSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */; };
 		SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEGMT001MATCH00000000001 /* SegmentMatcher.swift */; };
 		RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */; };
@@ -67,6 +71,7 @@
 		35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureExtractor.swift; sourceTree = "<group>"; };
 		35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingDataManager.swift; sourceTree = "<group>"; };
 		303738666235333938653064 /* AnalysisStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisStorage.swift; sourceTree = "<group>"; };
+		PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseDatabase.swift; sourceTree = "<group>"; };
 		35AACB8F2EF704C7003DAD74 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		35AACB902EF704C7003DAD74 /* MusicMillApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicMillApp.swift; sourceTree = "<group>"; };
 		35RAVE0001000000000000001 /* MusicMill.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MusicMill.entitlements; sourceTree = "<group>"; };
@@ -76,6 +81,7 @@
 		35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixingEngine.swift; sourceTree = "<group>"; };
 		35AACBA02EF704C7003DAD74 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
 		PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePerformanceView.swift; sourceTree = "<group>"; };
+		HYPER002FREF00000000001 /* HyperPhraseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhraseView.swift; sourceTree = "<group>"; };
 		GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularPerformanceView.swift; sourceTree = "<group>"; };
 		35AACBA12EF704C7003DAD74 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		35AACBA22EF704C7003DAD74 /* StyleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleController.swift; sourceTree = "<group>"; };
@@ -95,6 +101,8 @@
 		90CE387D266B165E2B7F55D7 /* GenerationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationController.swift; sourceTree = "<group>"; };
 		D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularSynthesizer.swift; sourceTree = "<group>"; };
 		PHRASE001FREF00000000001 /* PhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePlayer.swift; sourceTree = "<group>"; };
+		TRANS001FREF00000000001 /* TransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionEngine.swift; sourceTree = "<group>"; };
+		HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhrasePlayer.swift; sourceTree = "<group>"; };
 		B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleLibrary.swift; sourceTree = "<group>"; };
 		CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcatenativeSynthesizer.swift; sourceTree = "<group>"; };
 		SEGMT001MATCH00000000001 /* SegmentMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentMatcher.swift; sourceTree = "<group>"; };
@@ -151,6 +159,7 @@
 				35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */,
 				35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */,
 					303738666235333938653064 /* AnalysisStorage.swift */,
+					PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */,
 							FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */,
 				89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */,
 				8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */,
@@ -240,6 +249,7 @@
 				35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */,
 				35AACBA02EF704C7003DAD74 /* PerformanceView.swift */,
 				PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */,
+				HYPER002FREF00000000001 /* HyperPhraseView.swift */,
 				GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */,
 				35AACBA12EF704C7003DAD74 /* PlaybackController.swift */,
 				35AACBA22EF704C7003DAD74 /* StyleController.swift */,
@@ -254,6 +264,8 @@
 			children = (
 				D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */,
 				PHRASE001FREF00000000001 /* PhrasePlayer.swift */,
+				TRANS001FREF00000000001 /* TransitionEngine.swift */,
+				HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */,
 				B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */,
 				E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */,
 				59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */,
@@ -478,6 +490,7 @@
 				35AACBAE2EF704C7003DAD74 /* ModelManager.swift in Sources */,
 				35AACBAF2EF704C7003DAD74 /* TrainingDataManager.swift in Sources */,
 				636630666630666161366463 /* AnalysisStorage.swift in Sources */,
+				PHRASEDB001002EF704C7003D /* PhraseDatabase.swift in Sources */,
 				35AACBB02EF704C7003DAD74 /* TrainingView.swift in Sources */,
 				35AACBB12EF704C7003DAD74 /* StyleController.swift in Sources */,
 				35AACBB22EF704C7003DAD74 /* AudioAnalyzer.swift in Sources */,
@@ -488,6 +501,7 @@
 				35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */,
 				35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */,
 				PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */,
+				HYPER002BUILD00000000001 /* HyperPhraseView.swift in Sources */,
 				GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */,
 				35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */,
 				35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */,
@@ -500,6 +514,8 @@
 				615522429CA5A1392DD0C831 /* GenerationController.swift in Sources */,
 				49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */,
 				PHRASE002BUILD00000000001 /* PhrasePlayer.swift in Sources */,
+				TRANS001BUILD00000000001 /* TransitionEngine.swift in Sources */,
+				HYPER001BUILD00000000001 /* HyperPhrasePlayer.swift in Sources */,
 				CONCAT002BUILD00000000001 /* ConcatenativeSynthesizer.swift in Sources */,
 				SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */,
 				RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */,

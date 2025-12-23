@@ -6,30 +6,36 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
+            HyperPhraseView()
+                .tabItem {
+                    Label("HyperMusic", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                .tag(0)
+            
             PhrasePerformanceView()
                 .tabItem {
                     Label("Phrase", systemImage: "music.note.list")
                 }
-                .tag(0)
+                .tag(1)
             
             GranularPerformanceView()
                 .tabItem {
                     Label("Granular", systemImage: "waveform.path")
                 }
-                .tag(1)
+                .tag(2)
             
             RAVEView()
                 .tabItem {
                     Label("RAVE", systemImage: "waveform")
                 }
-                .tag(2)
+                .tag(3)
             
             TrainingView()
                 .tabItem {
                     Label("Training", systemImage: "brain")
                 }
-                .tag(3)
+                .tag(4)
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 1000, minHeight: 700)
     }
 }
