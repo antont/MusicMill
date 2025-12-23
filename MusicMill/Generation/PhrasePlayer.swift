@@ -200,6 +200,11 @@ class PhrasePlayer {
         return phrases.count
     }
     
+    /// Gets the audio engine for testing/routing
+    func getAudioEngine() -> AVAudioEngine {
+        return audioEngine
+    }
+    
     // MARK: - Phrase Selection
     
     /// Selects the best initial phrase based on parameters

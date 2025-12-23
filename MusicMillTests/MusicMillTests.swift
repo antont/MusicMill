@@ -951,6 +951,242 @@ struct MusicMillTests {
         #expect(scriptExists, "Server script should exist")
     }
     
+    // MARK: - PhrasePlayer Tests
+    
+    @Test @MainActor func testPhrasePlayerWithSegments() async throws {
+        print(String(repeating: "=", count: 60))
+        print("TESTING PHRASE PLAYER")
+        print(String(repeating: "=", count: 60))
+        
+        // Check for phrase segments
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let segmentsDir = documentsURL.appendingPathComponent("MusicMill/PhraseSegments")
+        let segmentsJSON = segmentsDir.appendingPathComponent("segments.json")
+        
+        guard FileManager.default.fileExists(atPath: segmentsJSON.path) else {
+            print("⚠️  No phrase segments found at: \(segmentsJSON.path)")
+            print("Run: python scripts/test_phrase_player.py first")
+            throw TestError.directoryNotFound("No phrase segments")
+        }
+        
+        // Load segment metadata
+        print("\n[1] Loading phrase segments...")
+        let data = try Data(contentsOf: segmentsJSON)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let segments = json?["segments"] as? [[String: Any]] else {
+            throw TestError.directoryNotFound("Invalid segments.json format")
+        }
+        
+        print("  Found \(segments.count) segments in JSON")
+        
+        // Create PhrasePlayer
+        print("\n[2] Creating PhrasePlayer...")
+        let phrasePlayer = PhrasePlayer()
+        
+        // Load segments into player
+        var loadedCount = 0
+        for segment in segments.prefix(10) { // Load up to 10 segments
+            guard let filePath = segment["file"] as? String,
+                  let tempo = segment["tempo"] as? Double,
+                  let segmentType = segment["type"] as? String,
+                  let beats = segment["beats"] as? [Double],
+                  let downbeats = segment["downbeats"] as? [Double],
+                  let energy = segment["energy"] as? Double else {
+                continue
+            }
+            
+            let url = URL(fileURLWithPath: filePath)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("  ⚠️  Missing: \(url.lastPathComponent)")
+                continue
+            }
+            
+            do {
+                // Load audio buffer
+                let file = try AVAudioFile(forReading: url)
+                let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+                guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(file.length)) else {
+                    continue
+                }
+                try file.read(into: buffer)
+                
+                // Load into phrase player
+                phrasePlayer.loadPhrase(
+                    id: url.lastPathComponent,
+                    buffer: buffer,
+                    beats: beats,
+                    downbeats: downbeats,
+                    tempo: tempo,
+                    energy: energy,
+                    segmentType: segmentType,
+                    style: nil
+                )
+                
+                loadedCount += 1
+                print("  ✓ Loaded: \(url.lastPathComponent) (\(String(format: "%.1f", tempo)) BPM, \(segmentType))")
+            } catch {
+                print("  ✗ Failed: \(url.lastPathComponent): \(error)")
+            }
+        }
+        
+        #expect(loadedCount >= 2, "Should load at least 2 phrases")
+        print("  Total loaded: \(loadedCount) phrases")
+        
+        // Configure playback
+        var params = PhrasePlayer.Parameters()
+        params.crossfadeBars = 2
+        params.masterVolume = 1.0
+        phrasePlayer.parameters = params
+        
+        // Set up audio capture
+        print("\n[3] Setting up audio capture...")
+        let engine = phrasePlayer.getAudioEngine()
+        let mainMixer = engine.mainMixerNode
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        
+        let outputDir = documentsURL.appendingPathComponent("MusicMill")
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let outputURL = outputDir.appendingPathComponent("phrase_player_test.wav")
+        try? FileManager.default.removeItem(at: outputURL)
+        
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 44100.0,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        
+        let outputFile = try AVAudioFile(forWriting: outputURL, settings: outputSettings)
+        var capturedFrames: AVAudioFrameCount = 0
+        let captureDuration: TimeInterval = 30.0 // 30 seconds to hear crossfades
+        
+        mainMixer.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+            try? outputFile.write(from: buffer)
+            capturedFrames += buffer.frameLength
+        }
+        
+        // Start playback
+        print("\n[4] Running PhrasePlayer for \(Int(captureDuration)) seconds...")
+        try phrasePlayer.start()
+        
+        try await Task.sleep(nanoseconds: UInt64(captureDuration * 1_000_000_000))
+        
+        phrasePlayer.stop()
+        mainMixer.removeTap(onBus: 0)
+        
+        print("  Captured \(capturedFrames) frames (\(String(format: "%.2f", Double(capturedFrames) / 44100.0)) seconds)")
+        
+        // Verify output
+        #expect(capturedFrames > 44100, "Should capture at least 1 second of audio")
+        
+        let fileSize = try FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int ?? 0
+        #expect(fileSize > 1000, "Output file should have data")
+        
+        print("  ✓ Saved to: \(outputURL.path)")
+        print("  File size: \(String(format: "%.1f", Double(fileSize) / 1024)) KB")
+        
+        // Analyze output quality
+        print("\n[5] Analyzing output quality...")
+        let featureExtractor = FeatureExtractor()
+        
+        // Load output for analysis
+        let analysisFile = try AVAudioFile(forReading: outputURL)
+        let analysisFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        guard let analysisBuffer = AVAudioPCMBuffer(pcmFormat: analysisFormat, frameCapacity: AVAudioFrameCount(analysisFile.length)) else {
+            throw TestError.noAudioOutput
+        }
+        try analysisFile.read(into: analysisBuffer)
+        
+        let outputFeatures = featureExtractor.extractFeatures(from: analysisBuffer)
+        
+        print("  Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "not detected")")
+        print("  Key: \(outputFeatures.key ?? "not detected")")
+        print("  Energy: \(String(format: "%.4f", outputFeatures.energy))")
+        print("  Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))")
+        print("  Spectral Flatness: \(String(format: "%.4f", outputFeatures.spectralFlatness)) (0=tonal, 1=noise)")
+        print("  HNR: \(String(format: "%.1f dB", outputFeatures.harmonicToNoiseRatio))")
+        
+        // Compare to granular synthesis expectations
+        // PhrasePlayer should have:
+        // - Lower click rate (smooth crossfades)
+        // - Lower spectral flatness (preserves original tonal content)
+        // - Detected tempo (plays real music segments)
+        
+        print("\n[6] Quality Assessment...")
+        
+        var passed = true
+        
+        // Click rate should be low (smooth playback)
+        if outputFeatures.clickRate > 10 {
+            print("  ⚠️  High click rate (\(String(format: "%.1f", outputFeatures.clickRate))/sec) - crossfades may be choppy")
+            passed = false
+        } else {
+            print("  ✓ Click rate is good (\(String(format: "%.1f", outputFeatures.clickRate))/sec)")
+        }
+        
+        // Should have detectable tempo (playing real music)
+        if outputFeatures.tempo != nil {
+            print("  ✓ Tempo detected - playing coherent music")
+        } else {
+            print("  ⚠️  No tempo detected - may be too fragmented")
+        }
+        
+        // Energy should be reasonable
+        if outputFeatures.energy > 0.01 {
+            print("  ✓ Good energy level (\(String(format: "%.4f", outputFeatures.energy)))")
+        } else {
+            print("  ⚠️  Low energy - audio may be too quiet")
+            passed = false
+        }
+        
+        // Write report
+        let reportURL = outputDir.appendingPathComponent("phrase_player_report.txt")
+        let report = """
+        ============================================================
+        PHRASE PLAYER TEST REPORT
+        Generated: \(Date())
+        ============================================================
+        
+        CONFIGURATION
+        -------------
+        Phrases Loaded: \(loadedCount)
+        Crossfade Bars: \(params.crossfadeBars)
+        Capture Duration: \(captureDuration) seconds
+        
+        OUTPUT ANALYSIS
+        ---------------
+        Duration: \(String(format: "%.2f", outputFeatures.duration)) seconds
+        Captured Frames: \(capturedFrames)
+        Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "not detected")
+        Key: \(outputFeatures.key ?? "not detected")
+        Energy: \(String(format: "%.4f", outputFeatures.energy))
+        Spectral Centroid: \(String(format: "%.1f Hz", outputFeatures.spectralCentroid))
+        Zero Crossing Rate: \(String(format: "%.4f", outputFeatures.zeroCrossingRate))
+        Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))
+        Spectral Flatness: \(String(format: "%.4f", outputFeatures.spectralFlatness))
+        Harmonic-to-Noise Ratio: \(String(format: "%.1f dB", outputFeatures.harmonicToNoiseRatio))
+        
+        QUALITY ASSESSMENT
+        ------------------
+        Result: \(passed ? "PASSED" : "NEEDS IMPROVEMENT")
+        
+        Output saved to: \(outputURL.path)
+        Listen with: afplay '\(outputURL.path)'
+        
+        ============================================================
+        """
+        
+        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
+        print("\n  Report: \(reportURL.path)")
+        
+        print("\n" + String(repeating: "=", count: 60))
+        print("PHRASE PLAYER TEST \(passed ? "PASSED ✓" : "NEEDS WORK ⚠️")")
+        print(String(repeating: "=", count: 60))
+        print("\nTo listen: afplay '\(outputURL.path)'")
+    }
+    
     @Test func testRAVEServerStart() async throws {
         print(String(repeating: "=", count: 60))
         print("RAVE SERVER START TEST")
