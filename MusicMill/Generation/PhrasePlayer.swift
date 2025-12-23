@@ -169,15 +169,15 @@ class PhrasePlayer {
             throw PhraseError.noPhrasesLoaded
         }
         
-        // Start with best matching phrase
+        // Start with best matching phrase (use internal unlocked version)
         if state.currentPhrase == nil {
-            state.currentPhrase = selectBestPhrase(afterType: nil)
+            state.currentPhrase = selectBestPhraseUnlocked(afterType: nil)
             state.playbackPosition = 0
         }
         
-        // Pre-select next phrase
+        // Pre-select next phrase (use internal unlocked version)
         if state.nextPhrase == nil, let current = state.currentPhrase {
-            state.nextPhrase = selectNextPhrase(after: current)
+            state.nextPhrase = selectNextPhraseUnlocked(after: current)
         }
         stateLock.unlock()
         
@@ -207,11 +207,15 @@ class PhrasePlayer {
     
     // MARK: - Phrase Selection
     
-    /// Selects the best initial phrase based on parameters
+    /// Selects the best initial phrase based on parameters (locks internally)
     private func selectBestPhrase(afterType: String?) -> Phrase? {
         stateLock.lock()
         defer { stateLock.unlock() }
-        
+        return selectBestPhraseUnlocked(afterType: afterType)
+    }
+    
+    /// Internal version - caller must hold stateLock
+    private func selectBestPhraseUnlocked(afterType: String?) -> Phrase? {
         guard !phrases.isEmpty else { return nil }
         
         parametersLock.lock()
@@ -264,11 +268,15 @@ class PhrasePlayer {
         return bestPhrase ?? phrases.first
     }
     
-    /// Selects the next phrase to play after the current one
+    /// Selects the next phrase to play after the current one (locks internally)
     private func selectNextPhrase(after current: Phrase) -> Phrase? {
         stateLock.lock()
         defer { stateLock.unlock() }
-        
+        return selectNextPhraseUnlocked(after: current)
+    }
+    
+    /// Internal version - caller must hold stateLock
+    private func selectNextPhraseUnlocked(after current: Phrase) -> Phrase? {
         guard phrases.count > 1 else { return phrases.first }
         
         parametersLock.lock()
@@ -399,9 +407,9 @@ class PhrasePlayer {
                     state.crossfadeLengthSamples = crossfadeSamples
                     state.crossfadeProgress = 0
                     
-                    // Ensure next phrase is ready
+                    // Ensure next phrase is ready (use unlocked version - we already hold the lock)
                     if state.nextPhrase == nil {
-                        state.nextPhrase = selectNextPhrase(after: currentPhrase)
+                        state.nextPhrase = selectNextPhraseUnlocked(after: currentPhrase)
                     }
                 }
             }
@@ -458,7 +466,7 @@ class PhrasePlayer {
                     // Transition to next phrase
                     state.currentPhrase = nextPhrase
                     state.playbackPosition = state.crossfadeLengthSamples
-                    state.nextPhrase = selectNextPhrase(after: nextPhrase)
+                    state.nextPhrase = selectNextPhraseUnlocked(after: nextPhrase)
                     state.isCrossfading = false
                     state.crossfadeProgress = 0
                     continue
@@ -480,7 +488,7 @@ class PhrasePlayer {
                 if let next = state.nextPhrase {
                     state.currentPhrase = next
                     state.playbackPosition = 0
-                    state.nextPhrase = selectNextPhrase(after: next)
+                    state.nextPhrase = selectNextPhraseUnlocked(after: next)
                 } else {
                     // Loop current phrase
                     state.playbackPosition = 0
