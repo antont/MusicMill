@@ -7,6 +7,7 @@ class SynthesisEngine {
     // MARK: - Types
     
     enum SynthesisBackend: String, CaseIterable {
+        case phrase = "Phrase"           // Beat-aligned phrase playback (recommended)
         case granular = "Granular"       // Classic granular synthesis (tiny grains)
         case concatenative = "Concatenative" // Longer segments with crossfading
         case rave = "RAVE"               // Neural synthesis via RAVE
@@ -14,6 +15,8 @@ class SynthesisEngine {
         
         var description: String {
             switch self {
+            case .phrase:
+                return "Phrase - beat-aligned musical segments, smooth flow"
             case .granular:
                 return "Granular synthesis - tiny audio grains, glitchy/textural"
             case .concatenative:
@@ -27,7 +30,7 @@ class SynthesisEngine {
     }
     
     struct Parameters {
-        var backend: SynthesisBackend = .concatenative
+        var backend: SynthesisBackend = .phrase  // Default to phrase mode
         var style: String?
         var tempo: Double?
         var key: String?
@@ -37,11 +40,12 @@ class SynthesisEngine {
     
     // MARK: - Properties
     
+    private var phrasePlayer: PhrasePlayer?
     private var granularSynthesizer: GranularSynthesizer?
     private var concatenativeSynthesizer: ConcatenativeSynthesizer?
     private var raveSynthesizer: RAVESynthesizer?
     
-    private var currentBackend: SynthesisBackend = .concatenative
+    private var currentBackend: SynthesisBackend = .phrase  // Default to phrase mode
     private var isPlaying = false
     
     private var sampleLibrary: SampleLibrary?
@@ -59,6 +63,14 @@ class SynthesisEngine {
     }
     
     // MARK: - Backend Management
+    
+    /// Gets or creates the phrase player
+    private func getPhrasePlayer() -> PhrasePlayer {
+        if phrasePlayer == nil {
+            phrasePlayer = PhrasePlayer()
+        }
+        return phrasePlayer!
+    }
     
     /// Gets or creates the granular synthesizer
     private func getGranularSynthesizer() -> GranularSynthesizer {
@@ -87,6 +99,9 @@ class SynthesisEngine {
     /// Checks if a backend is available
     func isBackendAvailable(_ backend: SynthesisBackend) -> Bool {
         switch backend {
+        case .phrase:
+            // Available if phrase player has phrases loaded
+            return phrasePlayer?.phraseCount ?? 0 > 0
         case .granular, .concatenative:
             // Available if we have samples loaded
             return sampleLibrary?.getAvailableStyles().count ?? 0 > 0
@@ -111,6 +126,15 @@ class SynthesisEngine {
         currentBackend = params.backend
         
         switch params.backend {
+        case .phrase:
+            let player = getPhrasePlayer()
+            var phraseParams = PhrasePlayer.Parameters()
+            phraseParams.masterVolume = params.masterVolume
+            phraseParams.targetStyle = params.style
+            phraseParams.targetTempo = params.tempo
+            phraseParams.targetEnergy = params.energy
+            player.parameters = phraseParams
+            
         case .granular:
             let synth = getGranularSynthesizer()
             var grainParams = GranularSynthesizer.GrainParameters()
@@ -203,6 +227,52 @@ class SynthesisEngine {
         }
     }
     
+    /// Loads phrases from librosa analysis for the PhrasePlayer
+    func loadPhrasesFromAnalysis(collectionURL: URL) async throws {
+        let storage = AnalysisStorage()
+        
+        guard let analysis = try storage.loadAnalysis(for: collectionURL) else {
+            throw SynthesisError.noSamplesLoaded
+        }
+        
+        let player = getPhrasePlayer()
+        var loadedCount = 0
+        
+        for audioFile in analysis.audioFiles {
+            guard let features = audioFile.features,
+                  features.beats != nil else {
+                // Skip files without beat analysis
+                continue
+            }
+            
+            let url = URL(fileURLWithPath: audioFile.path)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                continue
+            }
+            
+            do {
+                try player.loadPhrase(from: url, id: url.lastPathComponent, analysis: features)
+                loadedCount += 1
+                
+                // Limit for memory
+                if loadedCount >= 20 {
+                    break
+                }
+            } catch {
+                print("Warning: Could not load phrase from \(url.lastPathComponent): \(error)")
+            }
+        }
+        
+        #if DEBUG
+        print("[SynthesisEngine] Loaded \(loadedCount) phrases for PhrasePlayer")
+        #endif
+    }
+    
+    /// Gets phrase player for direct access
+    func getPhrasePlayerForUI() -> PhrasePlayer {
+        return getPhrasePlayer()
+    }
+    
     /// Starts RAVE server
     func startRAVEServer() async throws {
         let rave = getRaveSynthesizer()
@@ -252,6 +322,8 @@ class SynthesisEngine {
     /// Starts synthesis with current backend
     func start() throws {
         switch currentBackend {
+        case .phrase:
+            try getPhrasePlayer().start()
         case .granular:
             try getGranularSynthesizer().start()
         case .concatenative:
@@ -267,6 +339,7 @@ class SynthesisEngine {
     
     /// Stops synthesis
     func stop() {
+        phrasePlayer?.stop()
         granularSynthesizer?.stop()
         concatenativeSynthesizer?.stop()
         raveSynthesizer?.stop()
@@ -281,6 +354,8 @@ class SynthesisEngine {
     /// Gets audio engine for the current backend
     func getAudioEngine() -> AVAudioEngine? {
         switch currentBackend {
+        case .phrase:
+            return nil // PhrasePlayer manages its own engine internally
         case .granular:
             return granularSynthesizer?.getAudioEngine()
         case .concatenative:
