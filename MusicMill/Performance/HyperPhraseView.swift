@@ -288,34 +288,49 @@ struct HyperPhraseView: View {
         let isCurrent = index == currentIndex
         let isPast = index < currentIndex
         
-        return VStack(spacing: 4) {
-            // Segment type badge
-            Text(phrase.segmentType)
-                .font(.caption)
-                .fontWeight(.medium)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(segmentColor(phrase.segmentType).opacity(0.3))
-                .foregroundColor(segmentColor(phrase.segmentType))
-                .cornerRadius(4)
+        return VStack(spacing: 3) {
+            // Top row: Sequence number + Segment type
+            HStack {
+                Text("#\(phrase.sequenceNumber)")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text(phrase.segmentType)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(segmentColor(phrase.segmentType).opacity(0.3))
+                    .foregroundColor(segmentColor(phrase.segmentType))
+                    .cornerRadius(4)
+            }
+            
+            // Time range
+            Text(phrase.timeRange)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundColor(.primary)
             
             // Tempo
             Text("\(phrase.bpm) BPM")
-                .font(.caption)
+                .font(.caption2)
                 .foregroundColor(.secondary)
             
             // Energy bar
             HStack(spacing: 0) {
                 Rectangle()
                     .fill(energyGradient)
-                    .frame(width: 100 * CGFloat(phrase.energy), height: 6)
+                    .frame(width: 100 * CGFloat(phrase.energy), height: 5)
                 Rectangle()
                     .fill(Color.gray.opacity(0.2))
-                    .frame(width: 100 * CGFloat(1 - phrase.energy), height: 6)
+                    .frame(width: 100 * CGFloat(1 - phrase.energy), height: 5)
             }
-            .cornerRadius(3)
+            .cornerRadius(2)
         }
-        .frame(width: 156, height: 70)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(width: 156, height: 80)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(isCurrent ? Color.accentColor.opacity(0.25) : (isPast ? Color.gray.opacity(0.1) : Color(NSColor.controlBackgroundColor)))

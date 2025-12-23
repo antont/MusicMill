@@ -47,6 +47,8 @@ struct PhraseNode: Codable, Identifiable {
     let spectralCentroid: Double
     let segmentType: String           // intro, verse, chorus, drop, outro
     let duration: TimeInterval
+    let startTime: TimeInterval?      // Start time in original track (seconds)
+    let endTime: TimeInterval?        // End time in original track (seconds)
     
     // Beat grid (relative to segment start)
     let beats: [TimeInterval]
@@ -63,6 +65,44 @@ struct PhraseNode: Codable, Identifiable {
     
     var bpm: Int {
         Int(tempo.rounded())
+    }
+    
+    /// Sequence number for display (1-indexed)
+    var sequenceNumber: Int {
+        trackIndex + 1
+    }
+    
+    /// Format time as mm:ss
+    private func formatTime(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+    
+    /// Formatted time range (e.g., "1:30-2:05")
+    var timeRange: String {
+        if let start = startTime, let end = endTime {
+            return "\(formatTime(start))-\(formatTime(end))"
+        } else {
+            // Fallback: calculate from index and duration (approximate)
+            return "~\(formatTime(duration))"
+        }
+    }
+    
+    /// Formatted start time (e.g., "1:30")
+    var formattedStartTime: String {
+        if let start = startTime {
+            return formatTime(start)
+        }
+        return "--:--"
+    }
+    
+    /// Formatted end time (e.g., "2:05")
+    var formattedEndTime: String {
+        if let end = endTime {
+            return formatTime(end)
+        }
+        return "--:--"
     }
     
     var energyPercent: Int {

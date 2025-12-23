@@ -74,6 +74,8 @@ class PhraseNode:
     spectralCentroid: float
     segmentType: str
     duration: float
+    startTime: float      # Start time in original track (seconds)
+    endTime: float        # End time in original track (seconds)
     beats: List[float]
     downbeats: List[float]
     links: List[PhraseLink]
@@ -363,6 +365,8 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
                 spectralCentroid=spectral_centroid,
                 segmentType=segment.get("type", "verse"),
                 duration=duration,
+                startTime=start,
+                endTime=end,
                 beats=seg_beats,
                 downbeats=seg_downbeats,
                 links=[]
@@ -533,6 +537,8 @@ def save_phrase_graph(phrases: List[PhraseNode], collection_path: str, output_fi
             "spectralCentroid": phrase.spectralCentroid,
             "segmentType": phrase.segmentType,
             "duration": phrase.duration,
+            "startTime": phrase.startTime,
+            "endTime": phrase.endTime,
             "beats": phrase.beats,
             "downbeats": phrase.downbeats,
             "links": [
