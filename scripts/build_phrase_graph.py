@@ -553,7 +553,7 @@ def save_phrase_graph(phrases: List[PhraseNode], collection_path: str, output_fi
     
     graph = {
         "version": "1.0",
-        "createdAt": datetime.now().isoformat(),
+        "createdAt": datetime.now().astimezone().isoformat(),  # Include timezone for ISO8601 compliance
         "collectionPath": collection_path,
         "nodes": nodes
     }

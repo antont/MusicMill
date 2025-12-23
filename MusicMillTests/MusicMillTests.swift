@@ -1239,4 +1239,52 @@ struct MusicMillTests {
             throw error
         }
     }
+    
+    // MARK: - HyperMusic Tests
+    
+    @Test func testPhraseGraphLoading() async throws {
+        print(String(repeating: "=", count: 60))
+        print("TESTING PHRASE GRAPH LOADING")
+        print(String(repeating: "=", count: 60))
+        
+        let database = PhraseDatabase()
+        
+        print("\n[1] Checking if phrase graph exists...")
+        guard database.hasGraph else {
+            print("  ⚠ No phrase graph found - run build_phrase_graph.py first")
+            print("  Skipping test")
+            return
+        }
+        
+        print("  ✓ Phrase graph file exists")
+        
+        print("\n[2] Loading phrase graph...")
+        do {
+            try database.load()
+            print("  ✓ Loaded successfully!")
+            print("  - Nodes: \(database.nodeCount)")
+            print("  - Links: \(database.linkCount)")
+            print("  - Tracks: \(database.trackCount)")
+            
+            // Verify we can query
+            print("\n[3] Testing queries...")
+            let allTypes = database.getAllSegmentTypes()
+            print("  - Segment types: \(allTypes)")
+            
+            if let randomStart = database.getRandomStart() {
+                print("  - Random start phrase: \(randomStart.displayName)")
+                print("    Tempo: \(randomStart.bpm) BPM")
+                print("    Energy: \(randomStart.energyPercent)%")
+                print("    Links: \(randomStart.links.count)")
+            }
+            
+        } catch {
+            print("  ❌ Load failed: \(error.localizedDescription)")
+            throw error
+        }
+        
+        print("\n" + String(repeating: "=", count: 60))
+        print("PHRASE GRAPH LOADING TEST COMPLETE")
+        print(String(repeating: "=", count: 60))
+    }
 }
