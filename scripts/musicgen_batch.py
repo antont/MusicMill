@@ -59,12 +59,15 @@ STYLE_PROMPTS = [
 ]
 
 
-def find_reference_tracks(collection_path: Path) -> list[Path]:
-    """Find all audio files in the DJ collection"""
+def find_reference_tracks(collection_path: Path, min_size_kb: int = 1000) -> list[Path]:
+    """Find all audio files in the DJ collection, filtering out small samples"""
     extensions = {'.mp3', '.wav', '.flac', '.m4a', '.aiff'}
     tracks = []
     for ext in extensions:
-        tracks.extend(collection_path.rglob(f'*{ext}'))
+        for f in collection_path.rglob(f'*{ext}'):
+            # Filter out small files (likely samples/FX, not full tracks)
+            if f.stat().st_size > min_size_kb * 1024:
+                tracks.append(f)
     return tracks
 
 
@@ -161,28 +164,55 @@ def batch_generate(
     print(f"\nGenerating {count} tracks ({duration}s each)...")
     print(f"Output: {OUTPUT_DIR}\n")
     
+    successful = 0
+    failed_refs = set()
+    
     for i in range(count):
         print(f"[{i+1}/{count}] Generating...")
         
         # Pick random prompt
         prompt = random.choice(STYLE_PROMPTS)
         
-        # Pick random reference
+        # Pick random reference (avoid previously failed ones)
         if specific_reference:
             ref = specific_reference
         elif use_references and tracks:
-            ref = random.choice(tracks)
+            available = [t for t in tracks if t not in failed_refs]
+            if not available:
+                print("  Warning: All references failed, generating without reference")
+                ref = None
+            else:
+                ref = random.choice(available)
         else:
             ref = None
         
         start = time.time()
-        output = generate_track(model, prompt, ref, duration)
-        elapsed = time.time() - start
-        
-        print(f"  ✓ Saved: {output.name}")
-        print(f"  Time: {elapsed:.0f}s ({duration/elapsed:.2f}x realtime)\n")
+        try:
+            output = generate_track(model, prompt, ref, duration)
+            elapsed = time.time() - start
+            print(f"  ✓ Saved: {output.name}")
+            print(f"  Time: {elapsed:.0f}s ({duration/elapsed:.2f}x realtime)\n")
+            successful += 1
+        except RuntimeError as e:
+            if "probability tensor" in str(e) or "nan" in str(e).lower():
+                print(f"  ✗ Failed (bad reference audio): {ref.name if ref else 'N/A'}")
+                if ref:
+                    failed_refs.add(ref)
+                # Retry without reference
+                try:
+                    print("  Retrying without reference...")
+                    output = generate_track(model, prompt, None, duration)
+                    elapsed = time.time() - start
+                    print(f"  ✓ Saved: {output.name}")
+                    successful += 1
+                except Exception as e2:
+                    print(f"  ✗ Retry also failed: {e2}")
+            else:
+                print(f"  ✗ Error: {e}")
     
-    print(f"Done! {count} tracks saved to {OUTPUT_DIR}")
+    print(f"\nDone! {successful}/{count} tracks saved to {OUTPUT_DIR}")
+    if failed_refs:
+        print(f"Problematic references (skipped): {len(failed_refs)}")
 
 
 def daemon_mode(interval: int = 300, duration: int = 120):
