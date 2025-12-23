@@ -217,23 +217,24 @@ struct HyperPhraseView: View {
     
     private var radialView: some View {
         GeometryReader { geometry in
-            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            // Current phrase on LEFT, alternatives fan out to the RIGHT (left-to-right flow)
+            let currentPos = CGPoint(x: geometry.size.width * 0.2, y: geometry.size.height / 2)
             let radius: CGFloat = min(geometry.size.width, geometry.size.height) * 0.35
             
             ZStack {
-                // Center: Current phrase
+                // Left side: Current phrase (what's playing now)
                 if let current = player.currentPhrase {
                     PhraseNodeView(phrase: current, isSelected: true)
-                        .position(center)
+                        .position(currentPos)
                 }
                 
-                // Right: Next in sequence (original track)
+                // Right side: Next in sequence (original track) - horizontal
                 if let nextSeq = player.getNextInSequence() {
-                    let pos = CGPoint(x: center.x + radius, y: center.y)
+                    let pos = CGPoint(x: currentPos.x + radius * 1.2, y: currentPos.y)
                     
                     // Connection line
                     Path { path in
-                        path.move(to: center)
+                        path.move(to: currentPos)
                         path.addLine(to: pos)
                     }
                     .stroke(Color.blue.opacity(0.5), lineWidth: 2)
@@ -241,20 +242,20 @@ struct HyperPhraseView: View {
                     PhraseNodeView(phrase: nextSeq, isNext: player.nextPhrase?.id == nextSeq.id)
                         .position(pos)
                         .onTapGesture {
-                            player.queueNext(nextSeq)
+                            transitionTo(nextSeq)
                         }
                 }
                 
-                // Alternatives arranged in arc
+                // Right side: Alternatives arranged in arc (fanning to the right)
                 let alternatives = player.alternativePhrases
                 ForEach(Array(alternatives.enumerated()), id: \.element.id) { index, phrase in
                     let angle = angleForIndex(index, total: alternatives.count)
-                    let pos = pointOnCircle(center: center, radius: radius, angle: angle)
+                    let pos = pointOnCircle(center: currentPos, radius: radius, angle: angle)
                     
                     // Connection line with weight-based opacity
                     if let link = player.availableLinks.first(where: { $0.targetId == phrase.id }) {
                         Path { path in
-                            path.move(to: center)
+                            path.move(to: currentPos)
                             path.addLine(to: pos)
                         }
                         .stroke(Color.green.opacity(link.weight * 0.5), lineWidth: CGFloat(link.weight * 3))
@@ -263,10 +264,21 @@ struct HyperPhraseView: View {
                     PhraseNodeView(phrase: phrase, isNext: player.nextPhrase?.id == phrase.id)
                         .position(pos)
                         .onTapGesture {
-                            player.queueNext(phrase)
+                            transitionTo(phrase)
                         }
                 }
             }
+        }
+    }
+    
+    /// Tap to immediately transition to a phrase
+    private func transitionTo(_ phrase: PhraseNode) {
+        player.queueNext(phrase)
+        if player.isPlaying {
+            player.triggerTransition()
+        } else {
+            // Start playback if not already playing
+            try? player.start()
         }
     }
     
@@ -279,7 +291,7 @@ struct HyperPhraseView: View {
                 ForEach(player.getHigherEnergyPhrases(limit: 3), id: \.id) { phrase in
                     PhraseNodeView(phrase: phrase, isNext: player.nextPhrase?.id == phrase.id)
                         .onTapGesture {
-                            player.queueNext(phrase)
+                            transitionTo(phrase)
                         }
                 }
             }
@@ -305,7 +317,7 @@ struct HyperPhraseView: View {
                 if let next = player.getNextInSequence() {
                     PhraseNodeView(phrase: next, isNext: player.nextPhrase?.id == next.id)
                         .onTapGesture {
-                            player.queueNext(next)
+                            transitionTo(next)
                         }
                 } else {
                     RoundedRectangle(cornerRadius: 12)
@@ -323,7 +335,7 @@ struct HyperPhraseView: View {
                 ForEach(player.getLowerEnergyPhrases(limit: 3), id: \.id) { phrase in
                     PhraseNodeView(phrase: phrase, isNext: player.nextPhrase?.id == phrase.id)
                         .onTapGesture {
-                            player.queueNext(phrase)
+                            transitionTo(phrase)
                         }
                 }
             }
@@ -374,7 +386,7 @@ struct HyperPhraseView: View {
                 let isNext = player.nextPhrase?.id == next.id
                 PhraseNodeView(phrase: next, isNext: isNext)
                     .onTapGesture {
-                        player.queueNext(next)
+                        transitionTo(next)
                     }
             }
             .padding(.horizontal)
@@ -416,7 +428,7 @@ struct HyperPhraseView: View {
             }
         }
         .onTapGesture {
-            player.queueNext(phrase)
+            transitionTo(phrase)
         }
     }
     
@@ -447,11 +459,12 @@ struct HyperPhraseView: View {
     }
     
     private func angleForIndex(_ index: Int, total: Int) -> CGFloat {
-        // Arrange in upper arc (avoiding the right side where sequence is)
-        let startAngle: CGFloat = 120  // Start at upper-left
-        let endAngle: CGFloat = 240    // End at lower-left
+        // Arrange alternatives in arc to the RIGHT of current phrase
+        // Fan from upper-right (-60°) to lower-right (60°), avoiding horizontal where sequence is
+        let startAngle: CGFloat = -60  // Upper-right
+        let endAngle: CGFloat = 60     // Lower-right
         let range = endAngle - startAngle
-        let step = range / CGFloat(max(1, total - 1))
+        let step = total > 1 ? range / CGFloat(total - 1) : 0
         return (startAngle + CGFloat(index) * step) * .pi / 180
     }
     
