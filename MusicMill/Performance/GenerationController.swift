@@ -87,6 +87,18 @@ class GenerationController: ObservableObject {
         synthesisEngine.stop()
     }
     
+    /// Sets the master volume
+    func setVolume(_ volume: Float) {
+        var params = SynthesisEngine.Parameters()
+        params.style = style
+        params.tempo = tempo
+        params.key = key
+        params.energy = energy
+        params.backend = backend
+        params.masterVolume = volume
+        synthesisEngine.setParameters(params)
+    }
+    
     /// Smoothly transitions to new style
     func transitionToStyle(_ newStyle: String?, duration: TimeInterval = 2.0) {
         style = newStyle

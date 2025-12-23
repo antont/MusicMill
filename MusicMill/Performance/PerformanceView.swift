@@ -1,10 +1,6 @@
 import SwiftUI
 
 struct PerformanceView: View {
-    @StateObject private var styleController = StyleController()
-    @StateObject private var trackSelector = TrackSelector()
-    @StateObject private var playbackController = PlaybackController()
-    @StateObject private var mixingEngine = MixingEngine()
     @EnvironmentObject var modelManager: ModelManager
     
     // Generation components
@@ -14,13 +10,301 @@ struct PerformanceView: View {
         return GenerationController(synthesisEngine: synthesisEngine, sampleLibrary: sampleLibrary)
     }()
     
-    @State private var selectedTempo: Double = 120.0
-    @State private var selectedEnergy: Double = 0.5
-    @State private var selectedTrack: TrackSelector.Track?
     @State private var isGenerating = false
-    @State private var hasLoadedSamples = false
+    @State private var volume: Float = 0.8
     
-    // Computed property for RAVE status indicator color
+    var body: some View {
+        HStack(spacing: 0) {
+            // Left sidebar - Controls
+            VStack(alignment: .leading, spacing: 16) {
+                // Header
+                Text("Performance")
+                    .font(.title)
+                    .fontWeight(.bold)
+                
+                // Backend selector
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Synthesis Mode")
+                        .font(.headline)
+                    Picker("Backend", selection: $generationController.backend) {
+                        Text("Phrase").tag(SynthesisEngine.SynthesisBackend.phrase)
+                        Text("Granular").tag(SynthesisEngine.SynthesisBackend.granular)
+                        Text("RAVE").tag(SynthesisEngine.SynthesisBackend.rave)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                
+                Divider()
+                
+                // Backend-specific controls
+                switch generationController.backend {
+                case .phrase:
+                    phraseControls
+                case .granular, .concatenative:
+                    granularControls
+                case .rave, .hybrid:
+                    raveControls
+                }
+                
+                Divider()
+                
+                // Main play controls
+                playbackControls
+                
+                Spacer()
+                
+                // Volume
+                HStack {
+                    Image(systemName: "speaker.fill")
+                        .foregroundColor(.secondary)
+                    Slider(value: $volume, in: 0...1)
+                    Image(systemName: "speaker.wave.3.fill")
+                        .foregroundColor(.secondary)
+                }
+                .onChange(of: volume) { _, newValue in
+                    generationController.setVolume(newValue)
+                }
+            }
+            .padding()
+            .frame(width: 280)
+            .background(Color(NSColor.controlBackgroundColor))
+            
+            Divider()
+            
+            // Main area - Now Playing / Status
+            VStack {
+                Spacer()
+                
+                if isGenerating {
+                    nowPlayingView
+                } else {
+                    readyToPlayView
+                }
+                
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .onAppear {
+            generationController.refreshRAVEModels()
+        }
+    }
+    
+    // MARK: - Phrase Controls
+    
+    private var phraseControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Phrase Player")
+                .font(.headline)
+            
+            Text("Plays musical segments with beat-aligned crossfades")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            // Load button
+            Button(action: {
+                Task {
+                    await generationController.loadPhraseSegments()
+                }
+            }) {
+                HStack {
+                    Image(systemName: "waveform.badge.plus")
+                    Text("Load Segments")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(generationController.isLoading)
+            
+            // Status
+            HStack {
+                if generationController.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+                Text(generationController.loadingStatus)
+                    .font(.caption)
+                    .foregroundColor(statusColor)
+            }
+        }
+    }
+    
+    // MARK: - Granular Controls
+    
+    private var granularControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Granular Synthesis")
+                .font(.headline)
+            
+            Text("Experimental - tiny audio grains, glitchy textures")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Button(action: {
+                Task {
+                    await generationController.loadAvailableSamples()
+                }
+            }) {
+                HStack {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Load Samples")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(generationController.isLoading)
+            
+            HStack {
+                if generationController.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+                Text(generationController.loadingStatus)
+                    .font(.caption)
+                    .foregroundColor(statusColor)
+            }
+        }
+    }
+    
+    // MARK: - RAVE Controls
+    
+    private var raveControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("RAVE Neural Synthesis")
+                .font(.headline)
+            
+            Text("AI-generated audio (requires trained model)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            // Model selector
+            if !generationController.raveModels.isEmpty {
+                Picker("Model", selection: $generationController.currentRaveModel) {
+                    ForEach(generationController.raveModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                }
+                .onChange(of: generationController.currentRaveModel) { _, newModel in
+                    Task {
+                        await generationController.switchRAVEModel(to: newModel)
+                    }
+                }
+            }
+            
+            // Server status
+            HStack {
+                Circle()
+                    .fill(raveStatusColor)
+                    .frame(width: 8, height: 8)
+                Text(generationController.raveStatus)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Button("Start") {
+                    Task {
+                        await generationController.startRAVEServer()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(generationController.raveStatus == "Running")
+            }
+        }
+    }
+    
+    // MARK: - Playback Controls
+    
+    private var playbackControls: some View {
+        VStack(spacing: 16) {
+            // Big play/stop button
+            Button(action: togglePlayback) {
+                Image(systemName: isGenerating ? "stop.fill" : "play.fill")
+                    .font(.system(size: 32))
+                    .frame(width: 80, height: 80)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(isGenerating ? .red : .green)
+            .disabled(!canPlay)
+            
+            if !canPlay {
+                Text("Load segments first")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    // MARK: - Now Playing View
+    
+    private var nowPlayingView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "waveform")
+                .font(.system(size: 80))
+                .foregroundColor(.green)
+                .symbolEffect(.variableColor.iterative, options: .repeating)
+            
+            Text("Playing")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+            
+            Text(backendDescription)
+                .font(.title3)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    // MARK: - Ready View
+    
+    private var readyToPlayView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "waveform.circle")
+                .font(.system(size: 80))
+                .foregroundColor(.secondary)
+            
+            Text("Ready")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .foregroundColor(.secondary)
+            
+            if canPlay {
+                Text("Press play to start \(generationController.backend.rawValue) synthesis")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Load segments to begin")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    // MARK: - Helpers
+    
+    private var canPlay: Bool {
+        switch generationController.backend {
+        case .phrase:
+            return generationController.loadingStatus.contains("loaded")
+        case .granular, .concatenative:
+            return generationController.samplesLoaded > 0
+        case .rave, .hybrid:
+            return generationController.raveStatus == "Running"
+        }
+    }
+    
+    private var statusColor: Color {
+        if generationController.isLoading {
+            return .secondary
+        } else if generationController.loadingStatus.contains("loaded") || generationController.loadingStatus.contains("Ready") {
+            return .green
+        } else if generationController.loadingStatus.contains("Error") {
+            return .red
+        }
+        return .secondary
+    }
+    
     private var raveStatusColor: Color {
         switch generationController.raveStatus {
         case "Running":
@@ -34,337 +318,32 @@ struct PerformanceView: View {
         }
     }
     
-    var body: some View {
-        HStack(spacing: 0) {
-            // Left sidebar - Controls
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Performance Controls")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .padding(.bottom)
-                
-                // Style selector
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Style")
-                        .font(.headline)
-                    Picker("Style", selection: $styleController.selectedStyle) {
-                        Text("All Styles").tag(nil as String?)
-                        ForEach(styleController.availableStyles, id: \.self) { style in
-                            Text(style).tag(style as String?)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    
-                    Slider(value: $styleController.styleIntensity, in: 0...1) {
-                        Text("Intensity")
-                    }
-                    Text("Intensity: \(Int(styleController.styleIntensity * 100))%")
-                        .font(.caption)
-                }
-                
-                Divider()
-                
-                // Tempo control
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Tempo (BPM)")
-                        .font(.headline)
-                    Slider(value: $selectedTempo, in: 60...180, step: 1) {
-                        Text("Tempo")
-                    }
-                    Text("\(Int(selectedTempo)) BPM")
-                        .font(.caption)
-                }
-                
-                Divider()
-                
-                // Energy control
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Energy")
-                        .font(.headline)
-                    Slider(value: $selectedEnergy, in: 0...1) {
-                        Text("Energy")
-                    }
-                    Text("Energy: \(Int(selectedEnergy * 100))%")
-                        .font(.caption)
-                }
-                
-                Divider()
-                
-                Divider()
-                
-                // Synthesis Backend
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Synthesis Backend")
-                        .font(.headline)
-                    Picker("Backend", selection: $generationController.backend) {
-                        Text("Phrase").tag(SynthesisEngine.SynthesisBackend.phrase)
-                        Text("Granular").tag(SynthesisEngine.SynthesisBackend.granular)
-                        Text("Concatenative").tag(SynthesisEngine.SynthesisBackend.concatenative)
-                        Text("RAVE").tag(SynthesisEngine.SynthesisBackend.rave)
-                        Text("Hybrid").tag(SynthesisEngine.SynthesisBackend.hybrid)
-                    }
-                    .pickerStyle(.segmented)
-                    
-                    // Phrase backend controls
-                    if generationController.backend == .phrase {
-                        Button(action: {
-                            Task {
-                                await generationController.loadPhraseSegments()
-                            }
-                        }) {
-                            HStack {
-                                Image(systemName: "waveform.badge.plus")
-                                Text("Load Phrase Segments")
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(generationController.isLoading)
-                        
-                        Text(generationController.loadingStatus)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    // RAVE Status (when RAVE is selected)
-                    if generationController.backend == .rave || generationController.backend == .hybrid {
-                        // Model selector
-                        if !generationController.raveModels.isEmpty {
-                            HStack {
-                                Text("Model:")
-                                    .font(.caption)
-                                Picker("", selection: $generationController.currentRaveModel) {
-                                    ForEach(generationController.raveModels, id: \.self) { model in
-                                        Text(model).tag(model)
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .onChange(of: generationController.currentRaveModel) { _, newModel in
-                                    Task {
-                                        await generationController.switchRAVEModel(to: newModel)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        HStack {
-                            Circle()
-                                .fill(raveStatusColor)
-                                .frame(width: 8, height: 8)
-                            Text(generationController.raveStatus)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                Task {
-                                    await generationController.startRAVEServer()
-                                }
-                            }) {
-                                Text("Start Server")
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(generationController.raveStatus == "Running" || generationController.raveStatus.hasPrefix("Starting") || generationController.raveStatus.hasPrefix("Switching"))
-                        }
-                        
-                        // RAVE Style selector
-                        if !generationController.raveStyles.isEmpty {
-                            Picker("RAVE Style", selection: Binding(
-                                get: { styleController.selectedStyle },
-                                set: { styleController.selectedStyle = $0 }
-                            )) {
-                                Text("Random").tag(nil as String?)
-                                ForEach(generationController.raveStyles, id: \.self) { style in
-                                    Text(style).tag(style as String?)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                        }
-                    }
-                }
-                
-                Divider()
-                
-                // Generation controls
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Generation")
-                        .font(.headline)
-                    
-                    // Loading status
-                    if generationController.isLoading {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                        Text(generationController.loadingStatus)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text(generationController.loadingStatus)
-                            .font(.caption)
-                            .foregroundColor(generationController.samplesLoaded > 0 ? .green : .secondary)
-                    }
-                    
-                    HStack {
-                        Button(action: {
-                            if isGenerating {
-                                generationController.stop()
-                                isGenerating = false
-                            } else {
-                                do {
-                                    try generationController.start()
-                                    isGenerating = true
-                                } catch {
-                                    print("Failed to start generation: \(error)")
-                                }
-                            }
-                        }) {
-                            Image(systemName: isGenerating ? "stop.fill" : "play.fill")
-                                .font(.title2)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(generationController.samplesLoaded == 0 || generationController.isLoading)
-                        
-                        Spacer()
-                        
-                        // Reload button
-                        Button(action: {
-                            Task {
-                                await generationController.loadAvailableSamples()
-                            }
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .disabled(generationController.isLoading)
-                    }
-                }
-                
-                Divider()
-                
-                // Playback controls (for debug/example tracks)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Playback (Debug)")
-                        .font(.headline)
-                    HStack {
-                        Button(action: {
-                            if playbackController.isPlaying {
-                                playbackController.pause()
-                            } else {
-                                playbackController.play()
-                            }
-                        }) {
-                            Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.title2)
-                        }
-                        
-                        Spacer()
-                        
-                        Slider(value: $playbackController.volume, in: 0...1) {
-                            Text("Volume")
-                        }
-                        .frame(width: 100)
-                    }
-                }
-                
-                Spacer()
-            }
-            .padding()
-            .frame(width: 300)
-            .background(Color(NSColor.controlBackgroundColor))
-            
-            Divider()
-            
-            // Main area - Track browser
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Recommended Tracks")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .padding()
-                
-                List(trackSelector.recommendedTracks, id: \.url) { track in
-                    TrackRow(track: track, isSelected: selectedTrack?.url == track.url)
-                        .onTapGesture {
-                            selectedTrack = track
-                            playbackController.loadTrack(url: track.url)
-                        }
-                }
-                .listStyle(.plain)
-            }
-        }
-        .onAppear {
-            setupPerformance()
-        }
-        .onChange(of: styleController.selectedStyle) { newStyle in
-            generationController.style = newStyle
-            updateRecommendations()
-        }
-        .onChange(of: selectedTempo) { newTempo in
-            generationController.tempo = newTempo
-            updateRecommendations()
-        }
-        .onChange(of: selectedEnergy) { newEnergy in
-            generationController.energy = newEnergy
-            updateRecommendations()
+    private var backendDescription: String {
+        switch generationController.backend {
+        case .phrase:
+            return "Phrase Player - Musical Segments"
+        case .granular:
+            return "Granular Synthesis"
+        case .concatenative:
+            return "Concatenative Synthesis"
+        case .rave:
+            return "RAVE Neural Audio"
+        case .hybrid:
+            return "Hybrid Mode"
         }
     }
     
-    private func setupPerformance() {
-        // Update styles from model
-        styleController.updateStyles(from: modelManager.modelLabels)
-        
-        // Set up track selector with model if available
-        if let model = modelManager.currentModel {
-            trackSelector.setModel(model)
-        }
-        
-        // Refresh available RAVE models
-        generationController.refreshRAVEModels()
-        
-        // Load samples from analysis if not already loaded
-        if !hasLoadedSamples {
-            hasLoadedSamples = true
-            Task {
-                await generationController.loadAvailableSamples()
-                // Update style controller with available styles from samples
-                await MainActor.run {
-                    styleController.updateStyles(from: generationController.availableStyles)
-                }
+    private func togglePlayback() {
+        if isGenerating {
+            generationController.stop()
+            isGenerating = false
+        } else {
+            do {
+                try generationController.start()
+                isGenerating = true
+            } catch {
+                print("Failed to start: \(error)")
             }
         }
-    }
-    
-    private func updateRecommendations() {
-        trackSelector.recommendTracks(
-            for: styleController.selectedStyle ?? "All",
-            tempo: selectedTempo,
-            energy: selectedEnergy
-        )
     }
 }
-
-struct TrackRow: View {
-    let track: TrackSelector.Track
-    let isSelected: Bool
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(track.title)
-                    .font(.headline)
-                if let style = track.style ?? track.predictedStyle {
-                    Text(style)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                if let tempo = track.features?.tempo {
-                    Text("\(Int(tempo)) BPM")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            Spacer()
-        }
-        .padding(.vertical, 4)
-        .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
-    }
-}
-
