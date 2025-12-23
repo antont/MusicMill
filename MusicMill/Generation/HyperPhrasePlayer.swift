@@ -204,6 +204,21 @@ class HyperPhrasePlayer: ObservableObject {
         return database.getNextInSequence(for: current.id)
     }
     
+    /// Get all phrases from the current track (in order)
+    func getCurrentTrackPhrases() -> [PhraseNode] {
+        guard let current = currentPhrase else { return [] }
+        return database.getPhrasesForTrack(current.sourceTrack)
+    }
+    
+    /// Get branch options for a specific phrase (alternatives from other tracks)
+    func getBranchOptions(for phrase: PhraseNode, limit: Int = 5) -> [PhraseNode] {
+        let links = database.getLinks(for: phrase.id)
+        return links
+            .filter { !$0.isOriginalSequence }  // Exclude same-track sequence
+            .prefix(limit)
+            .compactMap { database.getPhrase(id: $0.targetId) }
+    }
+    
     // MARK: - Playback Control
     
     /// Start playback

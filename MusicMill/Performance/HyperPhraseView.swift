@@ -213,62 +213,168 @@ struct HyperPhraseView: View {
         .background(Color(NSColor.textBackgroundColor).opacity(0.3))
     }
     
-    // MARK: - Radial View
+    // MARK: - Timeline View (DJ Strip)
     
     private var radialView: some View {
-        GeometryReader { geometry in
-            // Current phrase on LEFT, alternatives fan out to the RIGHT (left-to-right flow)
-            let currentPos = CGPoint(x: geometry.size.width * 0.2, y: geometry.size.height / 2)
-            let radius: CGFloat = min(geometry.size.width, geometry.size.height) * 0.35
+        VStack(spacing: 0) {
+            // Track name header
+            if let current = player.currentPhrase {
+                Text(current.sourceTrackName)
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 8)
+            }
             
-            ZStack {
-                // Left side: Current phrase (what's playing now)
-                if let current = player.currentPhrase {
-                    PhraseNodeView(phrase: current, isSelected: true)
-                        .position(currentPos)
-                }
+            // Main timeline area
+            GeometryReader { geometry in
+                let trackPhrases = player.getCurrentTrackPhrases()
+                let currentIndex = trackPhrases.firstIndex(where: { $0.id == player.currentPhrase?.id }) ?? 0
                 
-                // Right side: Next in sequence (original track) - horizontal
-                if let nextSeq = player.getNextInSequence() {
-                    let pos = CGPoint(x: currentPos.x + radius * 1.2, y: currentPos.y)
+                ScrollViewReader { scrollProxy in
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        ZStack(alignment: .top) {
+                            // Track strip (horizontal timeline)
+                            trackStrip(phrases: trackPhrases, currentIndex: currentIndex, geometry: geometry)
+                            
+                            // Branch options at each phrase boundary
+                            branchOverlays(phrases: trackPhrases, currentIndex: currentIndex, geometry: geometry)
+                        }
+                        .frame(minWidth: geometry.size.width)
+                    }
+                    .onChange(of: player.currentPhrase?.id) { _, newId in
+                        // Auto-scroll to current phrase
+                        if let id = newId {
+                            withAnimation {
+                                scrollProxy.scrollTo(id, anchor: .center)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /// The horizontal track strip showing all phrases in the current song
+    private func trackStrip(phrases: [PhraseNode], currentIndex: Int, geometry: GeometryProxy) -> some View {
+        let phraseWidth: CGFloat = 160
+        let phraseHeight: CGFloat = 80
+        let stripY = geometry.size.height / 2
+        
+        return HStack(spacing: 0) {
+            ForEach(Array(phrases.enumerated()), id: \.element.id) { index, phrase in
+                let isCurrent = index == currentIndex
+                let isPast = index < currentIndex
+                
+                // Phrase box in the strip
+                VStack(spacing: 2) {
+                    // Segment type badge
+                    Text(phrase.segmentType)
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(segmentColor(phrase.segmentType).opacity(0.3))
+                        .foregroundColor(segmentColor(phrase.segmentType))
+                        .cornerRadius(4)
+                    
+                    // Tempo
+                    Text("\(phrase.bpm) BPM")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    // Energy bar
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.gray.opacity(0.3))
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(energyGradient)
+                                .frame(width: geo.size.width * CGFloat(phrase.energy))
+                        }
+                    }
+                    .frame(height: 4)
+                }
+                .frame(width: phraseWidth - 4, height: phraseHeight - 8)
+                .padding(2)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isCurrent ? Color.accentColor.opacity(0.3) : (isPast ? Color.gray.opacity(0.1) : Color(NSColor.controlBackgroundColor)))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isCurrent ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: isCurrent ? 2 : 1)
+                )
+                .opacity(isPast ? 0.5 : 1.0)
+                .id(phrase.id)
+                .onTapGesture {
+                    if !isCurrent {
+                        transitionTo(phrase)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .frame(height: phraseHeight)
+        .position(x: CGFloat(phrases.count) * phraseWidth / 2 + 20, y: stripY)
+    }
+    
+    /// Branch options that fan out from phrase boundaries
+    private func branchOverlays(phrases: [PhraseNode], currentIndex: Int, geometry: GeometryProxy) -> some View {
+        let phraseWidth: CGFloat = 160
+        let stripY = geometry.size.height / 2
+        
+        return ForEach(Array(phrases.enumerated()), id: \.element.id) { index, phrase in
+            // Only show branches for current and next few phrases
+            if index >= currentIndex && index <= currentIndex + 2 {
+                let branches = player.getBranchOptions(for: phrase, limit: 4)
+                let xPos = CGFloat(index) * phraseWidth + phraseWidth + 20  // At end of phrase
+                
+                // Branch lines and nodes
+                ForEach(Array(branches.enumerated()), id: \.element.id) { branchIndex, branchPhrase in
+                    let yOffset = branchYOffset(index: branchIndex, total: branches.count)
+                    let branchY = stripY + yOffset
                     
                     // Connection line
                     Path { path in
-                        path.move(to: currentPos)
-                        path.addLine(to: pos)
+                        path.move(to: CGPoint(x: xPos - phraseWidth/2, y: stripY))
+                        path.addQuadCurve(
+                            to: CGPoint(x: xPos + 60, y: branchY),
+                            control: CGPoint(x: xPos, y: (stripY + branchY) / 2)
+                        )
                     }
-                    .stroke(Color.blue.opacity(0.5), lineWidth: 2)
+                    .stroke(Color.green.opacity(0.4), lineWidth: 2)
                     
-                    PhraseNodeView(phrase: nextSeq, isNext: player.nextPhrase?.id == nextSeq.id)
-                        .position(pos)
+                    // Branch phrase card (compact)
+                    CompactPhraseCard(phrase: branchPhrase, isQueued: player.nextPhrase?.id == branchPhrase.id)
+                        .position(x: xPos + 100, y: branchY)
                         .onTapGesture {
-                            transitionTo(nextSeq)
-                        }
-                }
-                
-                // Right side: Alternatives arranged in arc (fanning to the right)
-                let alternatives = player.alternativePhrases
-                ForEach(Array(alternatives.enumerated()), id: \.element.id) { index, phrase in
-                    let angle = angleForIndex(index, total: alternatives.count)
-                    let pos = pointOnCircle(center: currentPos, radius: radius, angle: angle)
-                    
-                    // Connection line with weight-based opacity
-                    if let link = player.availableLinks.first(where: { $0.targetId == phrase.id }) {
-                        Path { path in
-                            path.move(to: currentPos)
-                            path.addLine(to: pos)
-                        }
-                        .stroke(Color.green.opacity(link.weight * 0.5), lineWidth: CGFloat(link.weight * 3))
-                    }
-                    
-                    PhraseNodeView(phrase: phrase, isNext: player.nextPhrase?.id == phrase.id)
-                        .position(pos)
-                        .onTapGesture {
-                            transitionTo(phrase)
+                            transitionTo(branchPhrase)
                         }
                 }
             }
         }
+    }
+    
+    /// Calculate Y offset for branch options (spread above and below the track)
+    private func branchYOffset(index: Int, total: Int) -> CGFloat {
+        let spacing: CGFloat = 70
+        let centerOffset = CGFloat(total - 1) / 2.0
+        return (CGFloat(index) - centerOffset) * spacing
+    }
+    
+    private func segmentColor(_ type: String) -> Color {
+        switch type {
+        case "intro": return .blue
+        case "verse": return .gray
+        case "chorus": return .purple
+        case "drop": return .red
+        case "breakdown": return .cyan
+        case "outro": return .orange
+        default: return .gray
+        }
+    }
+    
+    private var energyGradient: LinearGradient {
+        LinearGradient(colors: [.green, .yellow, .orange, .red], startPoint: .leading, endPoint: .trailing)
     }
     
     /// Tap to immediately transition to a phrase
@@ -457,22 +563,60 @@ struct HyperPhraseView: View {
         // TODO: Run build_phrase_graph.py script
         loadError = "Please run: python scripts/build_phrase_graph.py path/to/librosa_analysis.json"
     }
+}
+
+// MARK: - Compact Phrase Card (for branch options)
+
+struct CompactPhraseCard: View {
+    let phrase: PhraseNode
+    var isQueued: Bool = false
     
-    private func angleForIndex(_ index: Int, total: Int) -> CGFloat {
-        // Arrange alternatives in arc to the RIGHT of current phrase
-        // Fan from upper-right (-60°) to lower-right (60°), avoiding horizontal where sequence is
-        let startAngle: CGFloat = -60  // Upper-right
-        let endAngle: CGFloat = 60     // Lower-right
-        let range = endAngle - startAngle
-        let step = total > 1 ? range / CGFloat(total - 1) : 0
-        return (startAngle + CGFloat(index) * step) * .pi / 180
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Track name (truncated)
+            Text(phrase.sourceTrackName)
+                .font(.caption2)
+                .lineLimit(1)
+                .foregroundColor(.primary)
+            
+            HStack(spacing: 4) {
+                // Segment type
+                Text(phrase.segmentType)
+                    .font(.system(size: 9))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(segmentColor.opacity(0.3))
+                    .foregroundColor(segmentColor)
+                    .cornerRadius(3)
+                
+                // BPM
+                Text("\(phrase.bpm)")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(6)
+        .frame(width: 120)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isQueued ? Color.green : Color.green.opacity(0.3), lineWidth: isQueued ? 2 : 1)
+        )
     }
     
-    private func pointOnCircle(center: CGPoint, radius: CGFloat, angle: CGFloat) -> CGPoint {
-        CGPoint(
-            x: center.x + radius * cos(angle),
-            y: center.y + radius * sin(angle)
-        )
+    private var segmentColor: Color {
+        switch phrase.segmentType {
+        case "intro": return .blue
+        case "verse": return .gray
+        case "chorus": return .purple
+        case "drop": return .red
+        case "breakdown": return .cyan
+        case "outro": return .orange
+        default: return .gray
+        }
     }
 }
 
