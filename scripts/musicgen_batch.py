@@ -107,25 +107,26 @@ def generate_track(
     
     model.set_generation_params(duration=duration)
     
-    if reference_path:
-        # Convert reference to WAV
-        ref_wav = convert_to_wav(reference_path, duration=30)
-        ref_audio, ref_sr = sf.read(str(ref_wav))
-        ref_tensor = torch.tensor(ref_audio).float().unsqueeze(0).unsqueeze(0)
-        
-        print(f"  Reference: {reference_path.name[:50]}...")
-        print(f"  Prompt: {prompt}")
-        
-        wav = model.generate_with_chroma([prompt], ref_tensor, ref_sr)
-        
-        # Clean up temp file
-        ref_wav.unlink(missing_ok=True)
-        
-        output_name = f"gen_{timestamp}_ref.wav"
-    else:
-        print(f"  Prompt: {prompt}")
-        wav = model.generate([prompt])
-        output_name = f"gen_{timestamp}.wav"
+    with torch.inference_mode():
+        if reference_path:
+            # Convert reference to WAV
+            ref_wav = convert_to_wav(reference_path, duration=30)
+            ref_audio, ref_sr = sf.read(str(ref_wav))
+            ref_tensor = torch.tensor(ref_audio).float().unsqueeze(0).unsqueeze(0)
+            
+            print(f"  Reference: {reference_path.name[:50]}...")
+            print(f"  Prompt: {prompt}")
+            
+            wav = model.generate_with_chroma([prompt], ref_tensor, ref_sr)
+            
+            # Clean up temp file
+            ref_wav.unlink(missing_ok=True)
+            
+            output_name = f"gen_{timestamp}_ref.wav"
+        else:
+            print(f"  Prompt: {prompt}")
+            wav = model.generate([prompt])
+            output_name = f"gen_{timestamp}.wav"
     
     # Save
     audio = wav[0, 0].cpu().numpy()
@@ -335,12 +336,13 @@ def interactive_mode(duration: int = 90):
         
         model.set_generation_params(duration=duration)
         
-        # Convert reference
-        ref_wav = convert_to_wav(ref_path, duration=30)
-        ref_audio, ref_sr = sf.read(str(ref_wav))
-        ref_tensor = torch.tensor(ref_audio).float().unsqueeze(0).unsqueeze(0)
-        
-        wav = model.generate_with_chroma([prompt], ref_tensor, ref_sr)
+        with torch.inference_mode():
+            # Convert reference
+            ref_wav = convert_to_wav(ref_path, duration=30)
+            ref_audio, ref_sr = sf.read(str(ref_wav))
+            ref_tensor = torch.tensor(ref_audio).float().unsqueeze(0).unsqueeze(0)
+            
+            wav = model.generate_with_chroma([prompt], ref_tensor, ref_sr)
         ref_wav.unlink(missing_ok=True)
         
         # Save
