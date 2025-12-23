@@ -268,6 +268,82 @@ class SynthesisEngine {
         #endif
     }
     
+    /// Loads phrase segments from the prepared segments.json file
+    func loadPhraseSegments() async throws {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let segmentsDir = documentsURL.appendingPathComponent("MusicMill/PhraseSegments")
+        let segmentsJSON = segmentsDir.appendingPathComponent("segments.json")
+        
+        guard FileManager.default.fileExists(atPath: segmentsJSON.path) else {
+            throw SynthesisError.noSamplesLoaded
+        }
+        
+        let data = try Data(contentsOf: segmentsJSON)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let segments = json?["segments"] as? [[String: Any]] else {
+            throw SynthesisError.noSamplesLoaded
+        }
+        
+        let player = getPhrasePlayer()
+        var loadedCount = 0
+        
+        for segment in segments {
+            guard let filePath = segment["file"] as? String,
+                  let tempo = segment["tempo"] as? Double,
+                  let segmentType = segment["type"] as? String,
+                  let beats = segment["beats"] as? [Double],
+                  let downbeats = segment["downbeats"] as? [Double],
+                  let energy = segment["energy"] as? Double else {
+                continue
+            }
+            
+            let url = URL(fileURLWithPath: filePath)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("Warning: Segment file not found: \(filePath)")
+                continue
+            }
+            
+            do {
+                // Load audio buffer
+                let file = try AVAudioFile(forReading: url)
+                let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+                guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(file.length)) else {
+                    continue
+                }
+                try file.read(into: buffer)
+                
+                // Load into phrase player
+                player.loadPhrase(
+                    id: url.lastPathComponent,
+                    buffer: buffer,
+                    beats: beats,
+                    downbeats: downbeats,
+                    tempo: tempo,
+                    energy: energy,
+                    segmentType: segmentType,
+                    style: nil
+                )
+                
+                loadedCount += 1
+                
+                // Limit for memory
+                if loadedCount >= 30 {
+                    break
+                }
+            } catch {
+                print("Warning: Could not load segment \(url.lastPathComponent): \(error)")
+            }
+        }
+        
+        #if DEBUG
+        print("[SynthesisEngine] Loaded \(loadedCount) phrase segments")
+        #endif
+        
+        if loadedCount == 0 {
+            throw SynthesisError.noSamplesLoaded
+        }
+    }
+    
     /// Gets phrase player for direct access
     func getPhrasePlayerForUI() -> PhrasePlayer {
         return getPhrasePlayer()

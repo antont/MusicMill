@@ -97,12 +97,33 @@ struct PerformanceView: View {
                     Text("Synthesis Backend")
                         .font(.headline)
                     Picker("Backend", selection: $generationController.backend) {
+                        Text("Phrase").tag(SynthesisEngine.SynthesisBackend.phrase)
                         Text("Granular").tag(SynthesisEngine.SynthesisBackend.granular)
                         Text("Concatenative").tag(SynthesisEngine.SynthesisBackend.concatenative)
                         Text("RAVE").tag(SynthesisEngine.SynthesisBackend.rave)
                         Text("Hybrid").tag(SynthesisEngine.SynthesisBackend.hybrid)
                     }
                     .pickerStyle(.segmented)
+                    
+                    // Phrase backend controls
+                    if generationController.backend == .phrase {
+                        Button(action: {
+                            Task {
+                                await generationController.loadPhraseSegments()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "waveform.badge.plus")
+                                Text("Load Phrase Segments")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(generationController.isLoading)
+                        
+                        Text(generationController.loadingStatus)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     
                     // RAVE Status (when RAVE is selected)
                     if generationController.backend == .rave || generationController.backend == .hybrid {

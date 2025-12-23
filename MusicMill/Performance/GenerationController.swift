@@ -8,7 +8,7 @@ class GenerationController: ObservableObject {
     @Published var tempo: Double? = nil
     @Published var key: String? = nil
     @Published var energy: Double = 0.5
-    @Published var backend: SynthesisEngine.SynthesisBackend = .concatenative
+    @Published var backend: SynthesisEngine.SynthesisBackend = .phrase
     @Published var isLoading: Bool = false
     @Published var loadingStatus: String = ""
     @Published var samplesLoaded: Int = 0
@@ -43,6 +43,12 @@ class GenerationController: ObservableObject {
         $backend
             .sink { [weak self] backend in
                 self?.updateSynthesisBackend(backend)
+                // Auto-load phrase segments when switching to phrase backend
+                if backend == .phrase {
+                    Task {
+                        await self?.loadPhraseSegments()
+                    }
+                }
             }
             .store(in: &cancellables)
     }
@@ -297,6 +303,28 @@ class GenerationController: ObservableObject {
         } catch {
             await MainActor.run {
                 loadingStatus = "Error: \(error.localizedDescription)"
+                isLoading = false
+            }
+        }
+    }
+    
+    /// Loads phrase segments for the PhrasePlayer backend
+    func loadPhraseSegments() async {
+        await MainActor.run {
+            isLoading = true
+            loadingStatus = "Loading phrase segments..."
+        }
+        
+        do {
+            try await synthesisEngine.loadPhraseSegments()
+            
+            await MainActor.run {
+                loadingStatus = "Phrase segments loaded"
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                loadingStatus = "Error loading phrases: \(error.localizedDescription)"
                 isLoading = false
             }
         }
