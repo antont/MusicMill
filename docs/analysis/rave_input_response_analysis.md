@@ -138,3 +138,4 @@ Each image shows:
 - Bottom right: Output spectrum (0-6kHz)
 - Footer: RMS values and gain ratio
 
+
