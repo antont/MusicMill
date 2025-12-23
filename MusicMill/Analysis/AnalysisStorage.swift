@@ -65,6 +65,21 @@ class AnalysisStorage {
         let zeroCrossingRate: Double
         let rmsEnergy: Double
         let duration: TimeInterval
+        
+        // Beat/phrase analysis from librosa (optional for backward compatibility)
+        let beats: [TimeInterval]?
+        let downbeats: [TimeInterval]?
+        let onsets: [TimeInterval]?
+        let phrases: [TimeInterval]?
+        let segments: [SegmentInfo]?
+    }
+    
+    struct SegmentInfo: Codable {
+        let start: TimeInterval
+        let end: TimeInterval
+        let type: String  // intro, verse, chorus, breakdown, drop, outro
+        let energy: Double
+        let energyVariance: Double?
     }
     
     /// Saves analysis results for a collection
@@ -93,7 +108,13 @@ class AnalysisStorage {
                     spectralCentroid: $0.spectralCentroid,
                     zeroCrossingRate: $0.zeroCrossingRate,
                     rmsEnergy: $0.rmsEnergy,
-                    duration: $0.duration
+                    duration: $0.duration,
+                    // Beat/phrase data added later via librosa analysis
+                    beats: nil,
+                    downbeats: nil,
+                    onsets: nil,
+                    phrases: nil,
+                    segments: nil
                 )}
             )
         }
@@ -149,6 +170,147 @@ class AnalysisStorage {
         decoder.dateDecodingStrategy = .iso8601
         
         return try decoder.decode(AnalysisResult.self, from: jsonData)
+    }
+    
+    // MARK: - Librosa Analysis Loading
+    
+    /// Librosa analysis output format (from analyze_library.py)
+    struct LibrosaTrackAnalysis: Codable {
+        let path: String
+        let duration: Double
+        let tempo: Double
+        let key: String
+        let spectralCentroid: Double
+        let beats: [Double]
+        let downbeats: [Double]
+        let onsets: [Double]
+        let phrases: [Double]
+        let segments: [LibrosaSegment]
+        let energyContour: [EnergyPoint]?
+    }
+    
+    struct LibrosaSegment: Codable {
+        let start: Double
+        let end: Double
+        let type: String
+        let energy: Double
+        let energyVariance: Double?
+    }
+    
+    struct EnergyPoint: Codable {
+        let time: Double
+        let energy: Double
+    }
+    
+    struct LibrosaAnalysisResult: Codable {
+        let version: String?
+        let collectionPath: String?
+        let tracks: [LibrosaTrackAnalysis]?
+        
+        // Single track format (when analyzing one file)
+        let path: String?
+        let duration: Double?
+        let tempo: Double?
+        let key: String?
+        let beats: [Double]?
+        let downbeats: [Double]?
+        let phrases: [Double]?
+        let segments: [LibrosaSegment]?
+    }
+    
+    /// Loads librosa analysis from a JSON file
+    func loadLibrosaAnalysis(from url: URL) throws -> [LibrosaTrackAnalysis] {
+        let jsonData = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        
+        let result = try decoder.decode(LibrosaAnalysisResult.self, from: jsonData)
+        
+        // Check if it's a multi-track or single-track format
+        if let tracks = result.tracks {
+            return tracks
+        } else if let path = result.path,
+                  let duration = result.duration,
+                  let tempo = result.tempo,
+                  let key = result.key,
+                  let beats = result.beats,
+                  let downbeats = result.downbeats,
+                  let phrases = result.phrases,
+                  let segments = result.segments {
+            // Single track format
+            return [LibrosaTrackAnalysis(
+                path: path,
+                duration: duration,
+                tempo: tempo,
+                key: key,
+                spectralCentroid: 0,
+                beats: beats,
+                downbeats: downbeats,
+                onsets: [],
+                phrases: phrases,
+                segments: segments,
+                energyContour: nil
+            )]
+        }
+        
+        return []
+    }
+    
+    /// Merges librosa analysis into existing analysis result
+    func mergeLibrosaAnalysis(
+        existingAnalysis: AnalysisResult,
+        librosaAnalysis: [LibrosaTrackAnalysis]
+    ) -> AnalysisResult {
+        // Create a lookup by path
+        var librosaByPath: [String: LibrosaTrackAnalysis] = [:]
+        for track in librosaAnalysis {
+            librosaByPath[track.path] = track
+        }
+        
+        // Update audio files with librosa data
+        let updatedFiles = existingAnalysis.audioFiles.map { file -> AudioFileInfo in
+            if let librosa = librosaByPath[file.path] {
+                // Merge features
+                let updatedFeatures = AudioFeaturesInfo(
+                    tempo: librosa.tempo,
+                    key: librosa.key,
+                    energy: file.features?.energy ?? 0.5,
+                    spectralCentroid: librosa.spectralCentroid,
+                    zeroCrossingRate: file.features?.zeroCrossingRate ?? 0,
+                    rmsEnergy: file.features?.rmsEnergy ?? 0,
+                    duration: librosa.duration,
+                    beats: librosa.beats,
+                    downbeats: librosa.downbeats,
+                    onsets: librosa.onsets,
+                    phrases: librosa.phrases,
+                    segments: librosa.segments.map { seg in
+                        SegmentInfo(
+                            start: seg.start,
+                            end: seg.end,
+                            type: seg.type,
+                            energy: seg.energy,
+                            energyVariance: seg.energyVariance
+                        )
+                    }
+                )
+                
+                return AudioFileInfo(
+                    path: file.path,
+                    duration: librosa.duration,
+                    format: file.format,
+                    features: updatedFeatures
+                )
+            }
+            return file
+        }
+        
+        return AnalysisResult(
+            collectionPath: existingAnalysis.collectionPath,
+            analyzedDate: existingAnalysis.analyzedDate,
+            audioFiles: updatedFiles,
+            organizedStyles: existingAnalysis.organizedStyles,
+            totalFiles: existingAnalysis.totalFiles,
+            totalSamples: existingAnalysis.totalSamples
+        )
     }
     
     /// Checks if a collection has been analyzed before
