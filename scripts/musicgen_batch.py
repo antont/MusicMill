@@ -229,6 +229,104 @@ def daemon_mode(interval: int = 300, duration: int = 120):
         print(f"\n\nStopped. Generated {generation_count} tracks.")
 
 
+def interactive_mode(duration: int = 90):
+    """Interactive mode - enter reference + prompt, get generation"""
+    
+    device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+    print(f"Device: {device}")
+    print("Loading MusicGen melody (with reference support)...")
+    model = MusicGen.get_pretrained('facebook/musicgen-melody', device=device)
+    
+    tracks = find_reference_tracks(DJ_COLLECTION)
+    print(f"Found {len(tracks)} tracks in DJ collection")
+    print(f"Output: {OUTPUT_DIR}\n")
+    
+    print("=" * 60)
+    print("INTERACTIVE MODE")
+    print("=" * 60)
+    print("Enter a reference track (path, number, or 'random')")
+    print("Then enter your custom prompt")
+    print("Type 'list' to see available tracks")
+    print("Type 'quit' to exit")
+    print("=" * 60)
+    
+    # Index tracks for easy selection
+    track_index = {i: t for i, t in enumerate(tracks)}
+    
+    while True:
+        print("\n")
+        ref_input = input("Reference (path/number/random/list): ").strip()
+        
+        if ref_input.lower() == 'quit':
+            break
+        
+        if ref_input.lower() == 'list':
+            print("\nAvailable tracks:")
+            for i, t in enumerate(tracks[:30]):  # Show first 30
+                print(f"  {i}: {t.name[:60]}")
+            if len(tracks) > 30:
+                print(f"  ... and {len(tracks) - 30} more")
+            continue
+        
+        # Resolve reference
+        if ref_input.lower() == 'random':
+            ref_path = random.choice(tracks)
+        elif ref_input.isdigit():
+            idx = int(ref_input)
+            if idx in track_index:
+                ref_path = track_index[idx]
+            else:
+                print(f"Invalid index. Use 0-{len(tracks)-1}")
+                continue
+        else:
+            ref_path = Path(ref_input).expanduser()
+            if not ref_path.exists():
+                print(f"File not found: {ref_path}")
+                continue
+        
+        print(f"Using: {ref_path.name}")
+        
+        # Get prompt
+        prompt = input("Your prompt (or Enter for default): ").strip()
+        if not prompt:
+            prompt = random.choice(STYLE_PROMPTS)
+            print(f"Using: {prompt}")
+        
+        # Generate
+        print(f"\nGenerating {duration}s with your prompt...")
+        start = time.time()
+        
+        model.set_generation_params(duration=duration)
+        
+        # Convert reference
+        ref_wav = convert_to_wav(ref_path, duration=30)
+        ref_audio, ref_sr = sf.read(str(ref_wav))
+        ref_tensor = torch.tensor(ref_audio).float().unsqueeze(0).unsqueeze(0)
+        
+        wav = model.generate_with_chroma([prompt], ref_tensor, ref_sr)
+        ref_wav.unlink(missing_ok=True)
+        
+        # Save
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = OUTPUT_DIR / f"interactive_{timestamp}.wav"
+        
+        audio = wav[0, 0].cpu().numpy()
+        sf.write(str(output_path), audio, SAMPLE_RATE)
+        
+        elapsed = time.time() - start
+        print(f"\n✓ Saved: {output_path}")
+        print(f"  Time: {elapsed:.0f}s ({duration/elapsed:.2f}x realtime)")
+        
+        # Save metadata
+        meta_path = output_path.with_suffix('.txt')
+        with open(meta_path, 'w') as f:
+            f.write(f"Generated: {timestamp}\n")
+            f.write(f"Duration: {duration}s\n")
+            f.write(f"Prompt: {prompt}\n")
+            f.write(f"Reference: {ref_path}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description='MusicGen Batch Generator')
     parser.add_argument('--count', '-n', type=int, default=5,
@@ -245,6 +343,12 @@ def main():
                         help='Seconds between generations in daemon mode')
     parser.add_argument('--output', '-o', type=str,
                         help='Output directory')
+    parser.add_argument('--interactive', '-i', action='store_true',
+                        help='Interactive mode - enter reference + prompt')
+    parser.add_argument('--prompt', '-p', type=str,
+                        help='Custom prompt (use with --reference)')
+    parser.add_argument('--quick', '-q', action='store_true',
+                        help='Quick single generation with reference + prompt')
     
     args = parser.parse_args()
     
@@ -252,7 +356,27 @@ def main():
     if args.output:
         OUTPUT_DIR = Path(args.output)
     
-    if args.daemon:
+    if args.quick:
+        # Quick one-shot generation
+        if not args.reference:
+            print("Error: --quick requires --reference")
+            sys.exit(1)
+        prompt = args.prompt or random.choice(STYLE_PROMPTS)
+        
+        device = 'mps' if torch.backends.mps.is_available() else 'cpu'
+        print(f"Quick generation on {device}...")
+        model = MusicGen.get_pretrained('facebook/musicgen-melody', device=device)
+        
+        output = generate_track(
+            model, prompt, 
+            Path(args.reference), 
+            args.duration, 
+            OUTPUT_DIR
+        )
+        print(f"✓ {output}")
+    elif args.interactive:
+        interactive_mode(args.duration)
+    elif args.daemon:
         daemon_mode(args.interval, args.duration)
     else:
         batch_generate(
