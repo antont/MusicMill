@@ -288,48 +288,60 @@ struct HyperPhraseView: View {
         let isCurrent = index == currentIndex
         let isPast = index < currentIndex
         
-        return VStack(spacing: 3) {
-            // Top row: Sequence number + Segment type
-            HStack {
+        // Calculate playback progress for current phrase
+        let progress: Double = isCurrent ? player.playbackProgress : (isPast ? 1.0 : 0.0)
+        
+        return VStack(spacing: 2) {
+            // Top row: Sequence number + Segment type + Time
+            HStack(spacing: 4) {
                 Text("#\(phrase.sequenceNumber)")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundColor(.secondary)
+                
+                Text(phrase.segmentType)
+                    .font(.system(size: 9))
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(segmentColor(phrase.segmentType).opacity(0.3))
+                    .foregroundColor(segmentColor(phrase.segmentType))
+                    .cornerRadius(3)
                 
                 Spacer()
                 
-                Text(phrase.segmentType)
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(segmentColor(phrase.segmentType).opacity(0.3))
-                    .foregroundColor(segmentColor(phrase.segmentType))
-                    .cornerRadius(4)
+                Text(phrase.timeRange)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
             }
             
-            // Time range
-            Text(phrase.timeRange)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundColor(.primary)
+            // RGB Waveform
+            if let waveform = phrase.waveform {
+                WaveformView(
+                    waveform: waveform,
+                    playbackProgress: progress,
+                    showPlayhead: isCurrent,
+                    height: 40
+                )
+            } else {
+                // Fallback: energy bar if no waveform
+                HStack(spacing: 0) {
+                    Rectangle()
+                        .fill(energyGradient)
+                        .frame(width: 130 * CGFloat(phrase.energy), height: 40)
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 130 * CGFloat(1 - phrase.energy), height: 40)
+                }
+                .cornerRadius(4)
+            }
             
-            // Tempo
+            // Bottom row: Tempo
             Text("\(phrase.bpm) BPM")
-                .font(.caption2)
+                .font(.system(size: 9))
                 .foregroundColor(.secondary)
-            
-            // Energy bar
-            HStack(spacing: 0) {
-                Rectangle()
-                    .fill(energyGradient)
-                    .frame(width: 100 * CGFloat(phrase.energy), height: 5)
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 100 * CGFloat(1 - phrase.energy), height: 5)
-            }
-            .cornerRadius(2)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
         .frame(width: 156, height: 80)
         .background(
             RoundedRectangle(cornerRadius: 8)
@@ -612,40 +624,45 @@ struct CompactPhraseCard: View {
     var isQueued: Bool = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             // Top row: Sequence number + Track name
             HStack(spacing: 4) {
                 Text("#\(phrase.sequenceNumber)")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .foregroundColor(.secondary)
                 
                 Text(phrase.sourceTrackName)
-                    .font(.caption2)
+                    .font(.system(size: 9))
                     .lineLimit(1)
                     .foregroundColor(.primary)
+            }
+            
+            // Mini waveform
+            if let waveform = phrase.waveform {
+                CompactWaveformView(waveform: waveform, height: 18)
             }
             
             HStack(spacing: 4) {
                 // Segment type
                 Text(phrase.segmentType)
-                    .font(.system(size: 9))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
+                    .font(.system(size: 8))
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
                     .background(segmentColor.opacity(0.3))
                     .foregroundColor(segmentColor)
-                    .cornerRadius(3)
+                    .cornerRadius(2)
                 
                 Spacer()
                 
                 // BPM
                 Text("\(phrase.bpm)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .frame(width: 140)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .frame(width: 140, height: phrase.waveform != nil ? 55 : 45)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color(NSColor.controlBackgroundColor))

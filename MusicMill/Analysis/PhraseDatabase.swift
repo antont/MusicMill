@@ -30,6 +30,17 @@ struct PhraseLink: Codable, Identifiable {
     let spectralScore: Double
 }
 
+// MARK: - Waveform Data
+
+/// RGB waveform data for DJ-style display
+/// Blue = bass, Green = mids, Orange/Red = highs
+struct WaveformData: Codable {
+    let low: [Float]    // Bass amplitude (0-1) per point
+    let mid: [Float]    // Mid amplitude (0-1) per point
+    let high: [Float]   // High amplitude (0-1) per point
+    let points: Int     // Number of data points (typically 150)
+}
+
 // MARK: - Phrase Node
 
 /// A musical phrase with its features and outgoing links
@@ -53,6 +64,9 @@ struct PhraseNode: Codable, Identifiable {
     // Beat grid (relative to segment start)
     let beats: [TimeInterval]
     let downbeats: [TimeInterval]
+    
+    // RGB waveform for display
+    let waveform: WaveformData?
     
     // Graph edges - outgoing connections
     var links: [PhraseLink]

@@ -79,6 +79,82 @@ class PhraseNode:
     beats: List[float]
     downbeats: List[float]
     links: List[PhraseLink]
+    waveform: Optional[Dict] = None  # RGB waveform data {low, mid, high, points}
+
+# ============================================================================
+# WAVEFORM EXTRACTION
+# ============================================================================
+
+def extract_waveform_rgb(audio_path: str, num_points: int = 150) -> Optional[Dict]:
+    """
+    Extract low-res RGB waveform data for DJ-style display.
+    
+    Returns dict with:
+        - low: Bass frequencies (< 250 Hz) amplitude per point
+        - mid: Mid frequencies (250-4000 Hz) amplitude per point
+        - high: High frequencies (> 4000 Hz) amplitude per point
+        - points: Number of data points
+    
+    All values normalized to 0-1 range.
+    """
+    try:
+        import librosa
+        import numpy as np
+        
+        # Load audio
+        y, sr = librosa.load(audio_path, sr=22050, mono=True)
+        
+        if len(y) == 0:
+            return None
+        
+        # Compute STFT for frequency analysis
+        n_fft = 2048
+        hop_length = 512
+        D = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))
+        
+        # Get frequency bins
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        
+        # Split into frequency bands
+        low_mask = freqs < 250       # Bass
+        mid_mask = (freqs >= 250) & (freqs < 4000)  # Mids
+        high_mask = freqs >= 4000    # Highs
+        
+        # Sum energy in each band over time
+        low = np.mean(D[low_mask, :], axis=0) if np.any(low_mask) else np.zeros(D.shape[1])
+        mid = np.mean(D[mid_mask, :], axis=0) if np.any(mid_mask) else np.zeros(D.shape[1])
+        high = np.mean(D[high_mask, :], axis=0) if np.any(high_mask) else np.zeros(D.shape[1])
+        
+        # Resample to target number of points
+        orig_points = len(low)
+        if orig_points > 1:
+            x_orig = np.linspace(0, 1, orig_points)
+            x_new = np.linspace(0, 1, num_points)
+            low_resampled = np.interp(x_new, x_orig, low)
+            mid_resampled = np.interp(x_new, x_orig, mid)
+            high_resampled = np.interp(x_new, x_orig, high)
+        else:
+            low_resampled = np.zeros(num_points)
+            mid_resampled = np.zeros(num_points)
+            high_resampled = np.zeros(num_points)
+        
+        # Normalize to 0-1 (using global max across all bands)
+        max_val = max(low_resampled.max(), mid_resampled.max(), high_resampled.max())
+        if max_val > 0:
+            low_resampled = low_resampled / max_val
+            mid_resampled = mid_resampled / max_val
+            high_resampled = high_resampled / max_val
+        
+        return {
+            "low": [round(float(v), 4) for v in low_resampled],
+            "mid": [round(float(v), 4) for v in mid_resampled],
+            "high": [round(float(v), 4) for v in high_resampled],
+            "points": num_points
+        }
+        
+    except Exception as e:
+        print(f"    Warning: Could not extract waveform: {e}")
+        return None
 
 # ============================================================================
 # KEY COMPATIBILITY
@@ -380,7 +456,7 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
 
 def extract_audio_segments(phrases: List[PhraseNode], analysis: dict, output_dir: Path):
     """
-    Extract audio segments using ffmpeg.
+    Extract audio segments using ffmpeg and generate RGB waveforms.
     """
     print(f"\nExtracting audio segments to {output_dir}...")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -398,6 +474,8 @@ def extract_audio_segments(phrases: List[PhraseNode], analysis: dict, output_dir
         track_segments[track["path"]] = track.get("segments", [])
     
     extracted = 0
+    waveforms_generated = 0
+    
     for track_path, track_phrases in by_track.items():
         if not os.path.exists(track_path):
             print(f"  Warning: Track not found: {track_path}")
@@ -417,28 +495,38 @@ def extract_audio_segments(phrases: List[PhraseNode], analysis: dict, output_dir
             
             output_file = Path(phrase.audioFile)
             
-            if output_file.exists():
-                extracted += 1
-                continue
+            need_extract = not output_file.exists()
             
-            # Extract with ffmpeg
-            cmd = [
-                'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-                '-i', track_path,
-                '-ss', str(start),
-                '-t', str(duration),
-                '-ar', '44100',
-                '-ac', '2',
-                str(output_file)
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True)
-            if result.returncode == 0:
-                extracted += 1
+            if need_extract:
+                # Extract with ffmpeg
+                cmd = [
+                    'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                    '-i', track_path,
+                    '-ss', str(start),
+                    '-t', str(duration),
+                    '-ar', '44100',
+                    '-ac', '2',
+                    str(output_file)
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True)
+                if result.returncode == 0:
+                    extracted += 1
+                else:
+                    print(f"  Error extracting {output_file.name}")
+                    continue
             else:
-                print(f"  Error extracting {output_file.name}")
+                extracted += 1
+            
+            # Generate waveform if not already done
+            if phrase.waveform is None and output_file.exists():
+                waveform = extract_waveform_rgb(str(output_file))
+                if waveform:
+                    phrase.waveform = waveform
+                    waveforms_generated += 1
     
     print(f"Extracted {extracted} audio segments")
+    print(f"Generated {waveforms_generated} RGB waveforms")
 
 # ============================================================================
 # LINK COMPUTATION
@@ -541,6 +629,7 @@ def save_phrase_graph(phrases: List[PhraseNode], collection_path: str, output_fi
             "endTime": phrase.endTime,
             "beats": phrase.beats,
             "downbeats": phrase.downbeats,
+            "waveform": phrase.waveform,
             "links": [
                 {
                     "targetId": link.targetId,
@@ -558,7 +647,7 @@ def save_phrase_graph(phrases: List[PhraseNode], collection_path: str, output_fi
         nodes.append(node_dict)
     
     graph = {
-        "version": "1.0",
+        "version": "1.1",  # Added RGB waveform data
         "createdAt": datetime.now().astimezone().isoformat(),  # Include timezone for ISO8601 compliance
         "collectionPath": collection_path,
         "nodes": nodes

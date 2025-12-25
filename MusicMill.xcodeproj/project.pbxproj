@@ -47,6 +47,7 @@
 		8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */; };
 		QA01234567890123456789AB /* QualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = QA12345678901234567890AB /* QualityAnalyzer.swift */; };
 		RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEVIEW001FREF00000000001 /* RAVEView.swift */; };
+		WAVEFORM002BUILD00000000001 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORM001FREF00000000001 /* WaveformView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,6 +113,7 @@
 		59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralGenerator.swift; sourceTree = "<group>"; };
 		C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisEngine.swift; sourceTree = "<group>"; };
 		RAVEVIEW001FREF00000000001 /* RAVEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEView.swift; sourceTree = "<group>"; };
+		WAVEFORM001FREF00000000001 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -290,6 +292,7 @@
 			isa = PBXGroup;
 			children = (
 				RAVEVIEW001FREF00000000001 /* RAVEView.swift */,
+				WAVEFORM001FREF00000000001 /* WaveformView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -521,6 +524,7 @@
 				RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */,
 				RAVEB002BUILD00000000001 /* RAVEBridge.swift in Sources */,
 				RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */,
+				WAVEFORM002BUILD00000000001 /* WaveformView.swift in Sources */,
 				A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */,
 				E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */,
 				D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */,

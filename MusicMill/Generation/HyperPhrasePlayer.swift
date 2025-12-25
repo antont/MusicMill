@@ -34,6 +34,7 @@ class HyperPhrasePlayer: ObservableObject {
     @Published private(set) var alternativePhrases: [PhraseNode] = []
     @Published private(set) var isPlaying: Bool = false
     @Published private(set) var transitionProgress: Float = 0.0
+    @Published private(set) var playbackProgress: Double = 0.0  // 0-1 position in current phrase
     @Published private(set) var loadingError: String?
     
     // MARK: - Properties
@@ -383,6 +384,14 @@ class HyperPhrasePlayer: ObservableObject {
                     // Loop current phrase
                     state.playbackPosition = 0
                 }
+            }
+        }
+        
+        // Update playback progress for UI (throttled to avoid overwhelming main thread)
+        let progress = activeLength > 0 ? Double(state.playbackPosition) / Double(activeLength) : 0.0
+        if abs(progress - playbackProgress) > 0.005 {  // Update when changed by >0.5%
+            DispatchQueue.main.async { [weak self] in
+                self?.playbackProgress = progress
             }
         }
         
