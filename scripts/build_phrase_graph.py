@@ -405,23 +405,19 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
         
         print(f"  Processing {track_name}: {len(segments)} segments")
         
-        valid_phrase_index = 0  # Counter for valid phrases in this track
-        for orig_idx, segment in enumerate(segments):
+        # Include ALL segments for gapless playback (no duration filtering)
+        # Phrases are just markers into the original song, not separate audio files
+        for phrase_index, segment in enumerate(segments):
             start = segment.get("start", 0)
             end = segment.get("end", 0)
             duration = end - start
             
-            # Filter by duration
-            if duration < SEGMENT_DURATION_MIN or duration > SEGMENT_DURATION_MAX:
+            # Skip only truly degenerate segments (zero or negative duration)
+            if duration <= 0:
                 continue
             
             # Generate unique ID
             phrase_id = str(uuid.uuid4())
-            
-            # Create audio filename (use original index to match existing files if re-running)
-            safe_name = "".join(c if c.isalnum() else "_" for c in track_name)[:30]
-            audio_filename = f"{safe_name}_seg{orig_idx}.wav"
-            audio_path = output_dir / audio_filename
             
             # Extract segment beats (relative to segment start)
             seg_beats = [b - start for b in beats if start <= b < end]
@@ -431,8 +427,8 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
                 id=phrase_id,
                 sourceTrack=track_path,
                 sourceTrackName=track_name,
-                trackIndex=valid_phrase_index,  # Use sequential index for valid phrases
-                audioFile=str(audio_path),
+                trackIndex=phrase_index,  # Sequential index within track
+                audioFile=track_path,  # Point to ORIGINAL song, not extracted segment
                 tempo=tempo,
                 key=key,
                 energy=segment.get("energy", 0.5),
@@ -447,85 +443,130 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
             )
             
             phrases.append(phrase)
-            valid_phrase_index += 1  # Increment for next valid phrase
     
     print(f"Extracted {len(phrases)} phrases")
     return phrases
 
 
-def extract_audio_segments(phrases: List[PhraseNode], analysis: dict, output_dir: Path):
+def generate_phrase_waveforms(phrases: List[PhraseNode]):
     """
-    Extract audio segments using ffmpeg and generate RGB waveforms.
+    Generate RGB waveforms for each phrase by reading the time range from the original song.
+    No audio extraction needed - waveforms are computed directly from source files.
     """
-    print(f"\nExtracting audio segments to {output_dir}...")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\nGenerating waveforms for {len(phrases)} phrases...")
     
-    # Group phrases by track
+    # Group phrases by track for efficient loading
     by_track = {}
     for phrase in phrases:
         if phrase.sourceTrack not in by_track:
             by_track[phrase.sourceTrack] = []
         by_track[phrase.sourceTrack].append(phrase)
     
-    # Find segment info from analysis
-    track_segments = {}
-    for track in analysis.get("tracks", []):
-        track_segments[track["path"]] = track.get("segments", [])
-    
-    extracted = 0
     waveforms_generated = 0
+    tracks_processed = 0
     
     for track_path, track_phrases in by_track.items():
         if not os.path.exists(track_path):
             print(f"  Warning: Track not found: {track_path}")
             continue
         
-        segments = track_segments.get(track_path, [])
+        tracks_processed += 1
+        track_name = Path(track_path).stem[:30]
+        
+        # Load the full track audio once (more efficient than loading per-phrase)
+        try:
+            y, sr = librosa.load(track_path, sr=22050, mono=True)
+            track_duration = len(y) / sr
+        except Exception as e:
+            print(f"  Error loading {track_name}: {e}")
+            continue
         
         for phrase in track_phrases:
-            idx = phrase.trackIndex
-            if idx >= len(segments):
+            if phrase.waveform is not None:
+                waveforms_generated += 1
                 continue
             
-            segment = segments[idx]
-            start = segment.get("start", 0)
-            end = segment.get("end", 0)
-            duration = end - start
+            # Extract the time range for this phrase
+            start_time = phrase.startTime or 0
+            end_time = phrase.endTime or phrase.duration
             
-            output_file = Path(phrase.audioFile)
+            # Convert to samples
+            start_sample = int(start_time * sr)
+            end_sample = int(end_time * sr)
             
-            need_extract = not output_file.exists()
+            # Clamp to valid range
+            start_sample = max(0, min(start_sample, len(y) - 1))
+            end_sample = max(start_sample + 1, min(end_sample, len(y)))
             
-            if need_extract:
-                # Extract with ffmpeg
-                cmd = [
-                    'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-                    '-i', track_path,
-                    '-ss', str(start),
-                    '-t', str(duration),
-                    '-ar', '44100',
-                    '-ac', '2',
-                    str(output_file)
-                ]
-                
-                result = subprocess.run(cmd, capture_output=True)
-                if result.returncode == 0:
-                    extracted += 1
-                else:
-                    print(f"  Error extracting {output_file.name}")
-                    continue
-            else:
-                extracted += 1
+            # Extract segment audio
+            segment_audio = y[start_sample:end_sample]
             
-            # Generate waveform if not already done
-            if phrase.waveform is None and output_file.exists():
-                waveform = extract_waveform_rgb(str(output_file))
-                if waveform:
-                    phrase.waveform = waveform
-                    waveforms_generated += 1
+            if len(segment_audio) < 100:
+                continue
+            
+            # Generate waveform from segment
+            waveform = extract_waveform_from_audio(segment_audio, sr)
+            if waveform:
+                phrase.waveform = waveform
+                waveforms_generated += 1
+        
+        print(f"  {track_name}: {len(track_phrases)} phrases")
     
-    print(f"Extracted {extracted} audio segments")
-    print(f"Generated {waveforms_generated} RGB waveforms")
+    print(f"Generated {waveforms_generated} RGB waveforms from {tracks_processed} tracks")
+
+
+def extract_waveform_from_audio(y: np.ndarray, sr: int, num_points: int = 150) -> Optional[Dict]:
+    """
+    Extract RGB waveform data from audio array.
+    Returns frequency band data: low (bass), mid, high.
+    """
+    try:
+        # STFT
+        D = np.abs(librosa.stft(y, n_fft=2048, hop_length=512))
+        
+        # Frequency bins
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
+        
+        # Split into bands
+        low_mask = freqs < 250
+        mid_mask = (freqs >= 250) & (freqs < 4000)
+        high_mask = freqs >= 4000
+        
+        low_band = D[low_mask, :].sum(axis=0)
+        mid_band = D[mid_mask, :].sum(axis=0)
+        high_band = D[high_mask, :].sum(axis=0)
+        
+        # Resample to target points
+        def resample(arr, target):
+            if len(arr) <= target:
+                return arr
+            indices = np.linspace(0, len(arr) - 1, target).astype(int)
+            return arr[indices]
+        
+        low_resampled = resample(low_band, num_points)
+        mid_resampled = resample(mid_band, num_points)
+        high_resampled = resample(high_band, num_points)
+        
+        # Normalize each band independently to 0-1
+        def normalize_band(arr):
+            max_val = arr.max()
+            if max_val > 0:
+                return arr / max_val
+            return arr
+        
+        low_resampled = normalize_band(low_resampled)
+        mid_resampled = normalize_band(mid_resampled)
+        high_resampled = normalize_band(high_resampled)
+        
+        return {
+            "low": [round(float(v), 4) for v in low_resampled],
+            "mid": [round(float(v), 4) for v in mid_resampled],
+            "high": [round(float(v), 4) for v in high_resampled],
+            "points": num_points
+        }
+    except Exception as e:
+        print(f"    Waveform extraction error: {e}")
+        return None
 
 # ============================================================================
 # LINK COMPUTATION
@@ -674,9 +715,9 @@ def main():
     parser.add_argument('-o', '--output', type=str, default=None,
                         help='Output phrase_graph.json path')
     parser.add_argument('-s', '--segments-dir', type=str, default=None,
-                        help='Directory for extracted audio segments')
-    parser.add_argument('--skip-extraction', action='store_true',
-                        help='Skip audio segment extraction')
+                        help='Directory for cached data (waveforms, etc.)')
+    parser.add_argument('--skip-waveforms', action='store_true',
+                        help='Skip waveform generation')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Verbose output')
     
@@ -714,9 +755,9 @@ def main():
         print("No phrases extracted!")
         sys.exit(1)
     
-    # Extract audio segments
-    if not args.skip_extraction:
-        extract_audio_segments(phrases, analysis, segments_dir)
+    # Generate waveforms (no audio extraction needed - playback uses original files)
+    if not args.skip_waveforms:
+        generate_phrase_waveforms(phrases)
     
     # Compute links
     phrases = compute_all_links(phrases)

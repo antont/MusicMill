@@ -12,11 +12,12 @@ class HyperPhrasePlayer: ObservableObject {
     
     struct PlaybackState {
         var currentPhrase: PhraseNode?
-        var nextPhrase: PhraseNode?
-        var playbackPosition: Int = 0       // Sample position in current phrase
+        var nextPhrase: PhraseNode?           // Queued branch (could be same or different song)
+        var currentSongPath: String?          // Path to currently playing song
+        var songPosition: Int = 0             // Sample position within the full song
         var isTransitioning: Bool = false
         var transitionProgress: Float = 0.0
-        var pendingCut: Bool = false        // User requested beat-aligned cut
+        var pendingCut: Bool = false          // User requested beat-aligned cut
     }
     
     struct Settings {
@@ -50,15 +51,11 @@ class HyperPhrasePlayer: ObservableObject {
     private var settings = Settings()
     private let stateLock = NSLock()
     
-    // Audio buffers for current and next phrases
-    private var currentBuffer: AVAudioPCMBuffer?
-    private var nextBuffer: AVAudioPCMBuffer?
+    // Song cache - full songs loaded by path
+    private var songCache: [String: AVAudioPCMBuffer] = [:]
+    private var currentSongBuffer: AVAudioPCMBuffer?  // Currently playing song
+    private var pendingSongBuffer: AVAudioPCMBuffer?  // For cross-song transitions
     
-    // Transition mixing buffers
-    private var transitionOutLeft: [Float] = []
-    private var transitionOutRight: [Float] = []
-    private var transitionInLeft: [Float] = []
-    private var transitionInRight: [Float] = []
     
     // MARK: - Initialization
     
@@ -119,62 +116,63 @@ class HyperPhrasePlayer: ObservableObject {
     // MARK: - Phrase Selection
     
     /// Select a phrase to play
+    /// This loads the song (if needed) and seeks to the phrase's start time
     func selectPhrase(_ phrase: PhraseNode) {
         stateLock.lock()
         defer { stateLock.unlock() }
         
         state.currentPhrase = phrase
-        state.playbackPosition = 0
         state.isTransitioning = false
+        state.nextPhrase = nil
         
-        // Load audio buffer
-        loadBuffer(for: phrase) { [weak self] buffer in
-            self?.stateLock.lock()
-            self?.currentBuffer = buffer
-            self?.stateLock.unlock()
+        let songPath = phrase.audioFile  // Now points to original song
+        let startSample = Int((phrase.startTime ?? 0) * sampleRate)
+        
+        // Load song if needed
+        if state.currentSongPath != songPath {
+            // Different song - need to load it
+            loadSong(path: songPath) { [weak self] buffer in
+                guard let self = self else { return }
+                self.stateLock.lock()
+                self.currentSongBuffer = buffer
+                self.state.currentSongPath = songPath
+                self.state.songPosition = startSample
+                self.stateLock.unlock()
+            }
+        } else {
+            // Same song - just seek to phrase start
+            state.songPosition = startSample
         }
         
         // Update available links
         let links = database.getLinks(for: phrase.id)
         let alternatives = database.getAlternatives(for: phrase.id, limit: 8)
         
-        // Auto-select next phrase if enabled
-        let next: PhraseNode?
-        if settings.preferSameTrack, let seqNext = database.getNextInSequence(for: phrase.id) {
-            next = seqNext
-        } else {
-            next = links.first.flatMap { database.getPhrase(id: $0.targetId) }
-        }
-        
-        if let nextPhrase = next {
-            state.nextPhrase = nextPhrase
-            loadBuffer(for: nextPhrase) { [weak self] buffer in
-                self?.stateLock.lock()
-                self?.nextBuffer = buffer
-                self?.stateLock.unlock()
-            }
-        }
-        
         // Update published properties
         DispatchQueue.main.async {
             self.currentPhrase = phrase
-            self.nextPhrase = next
+            self.nextPhrase = nil
             self.availableLinks = links
             self.alternativePhrases = alternatives
         }
     }
     
-    /// Queue a specific phrase as next (user selection)
+    /// Queue a specific phrase as next (user selection / branch)
+    /// If the phrase is from a different song, pre-load that song
     func queueNext(_ phrase: PhraseNode) {
         stateLock.lock()
         state.nextPhrase = phrase
         stateLock.unlock()
         
-        // Load buffer
-        loadBuffer(for: phrase) { [weak self] buffer in
-            self?.stateLock.lock()
-            self?.nextBuffer = buffer
-            self?.stateLock.unlock()
+        let songPath = phrase.audioFile
+        
+        // Pre-load the song if it's different from current
+        if songPath != state.currentSongPath {
+            loadSong(path: songPath) { [weak self] buffer in
+                self?.stateLock.lock()
+                self?.pendingSongBuffer = buffer
+                self?.stateLock.unlock()
+            }
         }
         
         DispatchQueue.main.async {
@@ -227,7 +225,7 @@ class HyperPhrasePlayer: ObservableObject {
     
     /// Start playback
     func start() throws {
-        guard currentBuffer != nil else {
+        guard currentSongBuffer != nil else {
             throw HyperPlayerError.noPhrasesLoaded
         }
         
@@ -244,15 +242,25 @@ class HyperPhrasePlayer: ObservableObject {
         audioEngine.stop()
     }
     
-    /// Trigger transition to next phrase now (beat-aligned direct cut)
+    /// Trigger transition to queued branch (beat-aligned)
     func triggerTransition() {
         stateLock.lock()
         defer { stateLock.unlock() }
         
-        guard state.nextPhrase != nil, nextBuffer != nil else { return }
+        guard state.nextPhrase != nil else { return }
         
-        // Mark that we want to cut (will happen on next beat)
-        state.pendingCut = true
+        // For same-song branch, execute immediately at phrase boundary
+        // For cross-song branch, mark for beat-aligned cut
+        if let branch = state.nextPhrase,
+           branch.audioFile == state.currentSongPath {
+            // Same song - seek directly
+            let targetSample = Int((branch.startTime ?? 0) * sampleRate)
+            state.songPosition = targetSample
+            advanceToPhrase(branch)
+        } else {
+            // Cross-song - mark for beat-aligned cut
+            state.pendingCut = true
+        }
     }
     
     // MARK: - Settings
@@ -284,8 +292,9 @@ class HyperPhrasePlayer: ObservableObject {
         stateLock.lock()
         defer { stateLock.unlock() }
         
-        guard let buffer = currentBuffer,
-              let channelData = buffer.floatChannelData else {
+        // Get current song buffer
+        guard let songBuffer = currentSongBuffer,
+              let channelData = songBuffer.floatChannelData else {
             fillSilence(audioBufferList: audioBufferList, frameCount: frameCount)
             return noErr
         }
@@ -296,243 +305,151 @@ class HyperPhrasePlayer: ObservableObject {
         let leftOut = ablPointer[0].mData?.assumingMemoryBound(to: Float.self)
         let rightOut = ablPointer[1].mData?.assumingMemoryBound(to: Float.self)
         
-        let bufferLength = Int(buffer.frameLength)
-        let channelCount = Int(buffer.format.channelCount)
+        let songLength = Int(songBuffer.frameLength)
+        let channelCount = Int(songBuffer.format.channelCount)
         
-        // Check for pending beat-aligned cut
-        if state.pendingCut, nextBuffer != nil {
-            let currentTime = Double(state.playbackPosition) / sampleRate
-            if isNearBeat(currentTime, beats: state.currentPhrase?.beats ?? []) {
-                // Execute instant cut on beat
-                executeDirectCut()
+        // Get current phrase boundaries
+        let phraseEndSample = Int((state.currentPhrase?.endTime ?? Double.greatestFiniteMagnitude) * sampleRate)
+        
+        // Check for pending beat-aligned cut to branch
+        if state.pendingCut, let branchPhrase = state.nextPhrase {
+            let phraseRelativeTime = Double(state.songPosition) / sampleRate - (state.currentPhrase?.startTime ?? 0)
+            if isNearBeat(phraseRelativeTime, beats: state.currentPhrase?.beats ?? []) {
+                executeBranch(to: branchPhrase)
                 state.pendingCut = false
             }
         }
         
-        // Re-check buffer after potential cut
-        guard let activeBuffer = currentBuffer,
-              let activeChannelData = activeBuffer.floatChannelData else {
-            fillSilence(audioBufferList: audioBufferList, frameCount: frameCount)
-            return noErr
-        }
-        let activeLength = Int(activeBuffer.frameLength)
-        let activeChannelCount = Int(activeBuffer.format.channelCount)
-        
-        // Normal playback (no complex transitions for now)
+        // Render audio samples
         for i in 0..<Int(frameCount) {
-            if state.playbackPosition < activeLength {
+            if state.songPosition < songLength {
+                // Read from song buffer
                 let leftSample: Float
                 let rightSample: Float
                 
-                if activeChannelCount >= 2 {
-                    leftSample = activeChannelData[0][state.playbackPosition]
-                    rightSample = activeChannelData[1][state.playbackPosition]
+                if channelCount >= 2 {
+                    leftSample = channelData[0][state.songPosition]
+                    rightSample = channelData[1][state.songPosition]
                 } else {
-                    leftSample = activeChannelData[0][state.playbackPosition]
+                    leftSample = channelData[0][state.songPosition]
                     rightSample = leftSample
                 }
                 
                 leftOut?[i] = leftSample * settings.masterVolume
                 rightOut?[i] = rightSample * settings.masterVolume
-                state.playbackPosition += 1
-            } else {
-                // End of current phrase
-                if settings.autoAdvance && state.nextPhrase != nil && nextBuffer != nil {
-                    // Check if this is a sequential same-track transition
-                    let isSequential = isSequentialTransition()
-                    
-                    if isSequential {
-                        // Seamless gapless transition - just swap and continue
-                        completeGaplessTransition()
-                        // Continue playing from the new buffer at position 0
-                        if let newChannelData = currentBuffer?.floatChannelData,
-                           Int(currentBuffer?.frameLength ?? 0) > 0 {
-                            let newChannelCount = Int(currentBuffer?.format.channelCount ?? 1)
-                            if newChannelCount >= 2 {
-                                leftOut?[i] = newChannelData[0][0] * settings.masterVolume
-                                rightOut?[i] = newChannelData[1][0] * settings.masterVolume
-                            } else {
-                                let sample = newChannelData[0][0] * settings.masterVolume
-                                leftOut?[i] = sample
-                                rightOut?[i] = sample
-                            }
-                            state.playbackPosition = 1
-                        } else {
-                            leftOut?[i] = 0
-                            rightOut?[i] = 0
-                        }
-                    } else {
-                        // Cross-track or non-sequential at end of phrase: direct cut
-                        executeDirectCut()
-                        // Play first sample of new buffer
-                        if let newChannelData = currentBuffer?.floatChannelData,
-                           Int(currentBuffer?.frameLength ?? 0) > 0 {
-                            let newChannelCount = Int(currentBuffer?.format.channelCount ?? 1)
-                            if newChannelCount >= 2 {
-                                leftOut?[i] = newChannelData[0][0] * settings.masterVolume
-                                rightOut?[i] = newChannelData[1][0] * settings.masterVolume
-                            } else {
-                                let sample = newChannelData[0][0] * settings.masterVolume
-                                leftOut?[i] = sample
-                                rightOut?[i] = sample
-                            }
-                            state.playbackPosition = 1
-                        } else {
-                            leftOut?[i] = 0
-                            rightOut?[i] = 0
-                        }
-                    }
-                } else {
-                    // Loop current phrase
-                    state.playbackPosition = 0
+                state.songPosition += 1
+                
+                // Check if we've reached phrase boundary
+                if state.songPosition >= phraseEndSample {
+                    handlePhraseEnd()
                 }
+            } else {
+                // End of song
+                if settings.autoAdvance, let branchPhrase = state.nextPhrase {
+                    executeBranch(to: branchPhrase)
+                } else {
+                    // Loop from start of current phrase
+                    state.songPosition = Int((state.currentPhrase?.startTime ?? 0) * sampleRate)
+                }
+                leftOut?[i] = 0
+                rightOut?[i] = 0
             }
         }
         
-        // Update playback progress for UI (throttled to avoid overwhelming main thread)
-        let progress = activeLength > 0 ? Double(state.playbackPosition) / Double(activeLength) : 0.0
-        if abs(progress - playbackProgress) > 0.005 {  // Update when changed by >0.5%
-            DispatchQueue.main.async { [weak self] in
-                self?.playbackProgress = progress
-            }
-        }
+        // Calculate and publish playback progress within current phrase
+        updatePlaybackProgress()
         
         return noErr
     }
     
-    private func renderTransition(
-        frameCount: Int,
-        currentBuffer: UnsafePointer<UnsafeMutablePointer<Float>>,
-        currentLength: Int,
-        currentChannels: Int,
-        nextBuffer: UnsafePointer<UnsafeMutablePointer<Float>>,
-        nextLength: Int,
-        nextChannels: Int,
-        leftOut: UnsafeMutablePointer<Float>?,
-        rightOut: UnsafeMutablePointer<Float>?
-    ) {
-        // Ensure transition buffers are big enough
-        if transitionOutLeft.count < frameCount {
-            transitionOutLeft = [Float](repeating: 0, count: frameCount)
-            transitionOutRight = [Float](repeating: 0, count: frameCount)
-            transitionInLeft = [Float](repeating: 0, count: frameCount)
-            transitionInRight = [Float](repeating: 0, count: frameCount)
-        }
+    /// Handle reaching the end of the current phrase
+    private func handlePhraseEnd() {
+        guard let songPath = state.currentSongPath else { return }
         
-        // Fill outgoing buffers from current phrase
-        for i in 0..<frameCount {
-            let pos = state.playbackPosition + i
-            if pos < currentLength {
-                if currentChannels >= 2 {
-                    transitionOutLeft[i] = currentBuffer[0][pos]
-                    transitionOutRight[i] = currentBuffer[1][pos]
-                } else {
-                    transitionOutLeft[i] = currentBuffer[0][pos]
-                    transitionOutRight[i] = transitionOutLeft[i]
-                }
+        // Check if there's a queued branch
+        if let branchPhrase = state.nextPhrase {
+            // Is it to a different song?
+            if branchPhrase.audioFile != songPath {
+                // Cross-song branch - execute transition
+                executeBranch(to: branchPhrase)
             } else {
-                transitionOutLeft[i] = 0
-                transitionOutRight[i] = 0
+                // Same-song branch - just update current phrase and continue
+                advanceToPhrase(branchPhrase)
             }
-        }
-        
-        // Fill incoming buffers from next phrase
-        // Start from beginning of next phrase during transition
-        let transitionPosition = max(0, state.playbackPosition - (currentLength - Int(transitionEngine.transitionDuration() * sampleRate)))
-        
-        for i in 0..<frameCount {
-            let pos = transitionPosition + i
-            if pos >= 0 && pos < nextLength {
-                if nextChannels >= 2 {
-                    transitionInLeft[i] = nextBuffer[0][pos]
-                    transitionInRight[i] = nextBuffer[1][pos]
-                } else {
-                    transitionInLeft[i] = nextBuffer[0][pos]
-                    transitionInRight[i] = transitionInLeft[i]
-                }
-            } else {
-                transitionInLeft[i] = 0
-                transitionInRight[i] = 0
+        } else if settings.autoAdvance {
+            // Auto-advance to next phrase in same song
+            if let nextPhrase = database.getNextInSequence(for: state.currentPhrase?.id ?? "") {
+                advanceToPhrase(nextPhrase)
             }
+            // If no next phrase, just keep playing (song will naturally end)
         }
+        // If no branch and no auto-advance, continue playing (phrase boundaries are just markers)
+    }
+    
+    /// Advance to a new phrase within the same song (gapless)
+    private func advanceToPhrase(_ phrase: PhraseNode) {
+        state.currentPhrase = phrase
+        state.nextPhrase = nil
         
-        // Process transition
-        transitionOutLeft.withUnsafeBufferPointer { outL in
-            transitionOutRight.withUnsafeBufferPointer { outR in
-                transitionInLeft.withUnsafeBufferPointer { inL in
-                    transitionInRight.withUnsafeBufferPointer { inR in
-                        if let leftOut = leftOut, let rightOut = rightOut {
-                            transitionEngine.process(
-                                outgoingLeft: outL.baseAddress!,
-                                outgoingRight: outR.baseAddress!,
-                                incomingLeft: inL.baseAddress!,
-                                incomingRight: inR.baseAddress!,
-                                outputLeft: leftOut,
-                                outputRight: rightOut,
-                                frameCount: frameCount
-                            )
-                            
-                            // Apply master volume
-                            for i in 0..<frameCount {
-                                leftOut[i] *= settings.masterVolume
-                                rightOut[i] *= settings.masterVolume
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Update UI
+        let links = database.getLinks(for: phrase.id)
+        let alternatives = database.getAlternatives(for: phrase.id, limit: 8)
         
-        state.playbackPosition += frameCount
-        
-        // Check if transition is complete
-        if transitionEngine.isComplete {
-            completeTransition()
+        DispatchQueue.main.async { [weak self] in
+            self?.currentPhrase = phrase
+            self?.nextPhrase = nil
+            self?.availableLinks = links
+            self?.alternativePhrases = alternatives
         }
     }
     
-    private func completeTransition() {
-        // Swap buffers
-        currentBuffer = nextBuffer
-        nextBuffer = nil
+    /// Execute a branch transition to a different song
+    private func executeBranch(to phrase: PhraseNode) {
+        let songPath = phrase.audioFile
+        let startSample = Int((phrase.startTime ?? 0) * sampleRate)
         
-        // Update state
-        if let next = state.nextPhrase {
-            state.currentPhrase = next
-            state.playbackPosition = Int(transitionEngine.transitionDuration() * sampleRate)
-            
-            // Select new next phrase
-            let links = database.getLinks(for: next.id)
-            let alternatives = database.getAlternatives(for: next.id, limit: 8)
-            
-            let newNext: PhraseNode?
-            if settings.preferSameTrack, let seqNext = database.getNextInSequence(for: next.id) {
-                newNext = seqNext
-            } else {
-                newNext = links.first.flatMap { database.getPhrase(id: $0.targetId) }
-            }
-            
-            state.nextPhrase = newNext
-            
-            if let newNextPhrase = newNext {
-                loadBuffer(for: newNextPhrase) { [weak self] buffer in
-                    self?.stateLock.lock()
-                    self?.nextBuffer = buffer
-                    self?.stateLock.unlock()
-                }
-            }
-            
-            // Update published properties
-            DispatchQueue.main.async {
-                self.currentPhrase = next
-                self.nextPhrase = newNext
-                self.availableLinks = links
-                self.alternativePhrases = alternatives
+        // If song is pre-loaded in pending buffer, use it
+        if songPath != state.currentSongPath, let pendingBuffer = pendingSongBuffer {
+            currentSongBuffer = pendingBuffer
+            pendingSongBuffer = nil
+            state.currentSongPath = songPath
+            state.songPosition = startSample
+        } else if songPath == state.currentSongPath {
+            // Same song, just seek
+            state.songPosition = startSample
+        } else {
+            // Song not loaded - load synchronously (should have been pre-loaded)
+            print("[HyperPhrasePlayer] Warning: Song not pre-loaded for branch: \(songPath)")
+            // Load from cache if available
+            if let cached = songCache[songPath] {
+                currentSongBuffer = cached
+                state.currentSongPath = songPath
+                state.songPosition = startSample
             }
         }
         
-        state.isTransitioning = false
-        transitionEngine.reset()
+        advanceToPhrase(phrase)
+    }
+    
+    /// Update playback progress (0-1 within current phrase)
+    private func updatePlaybackProgress() {
+        guard let phrase = state.currentPhrase else { return }
+        
+        let phraseStart = phrase.startTime ?? 0
+        let phraseEnd = phrase.endTime ?? phrase.duration
+        let phraseDuration = phraseEnd - phraseStart
+        
+        guard phraseDuration > 0 else { return }
+        
+        let currentTime = Double(state.songPosition) / sampleRate
+        let phraseRelativeTime = currentTime - phraseStart
+        let progress = min(1.0, max(0.0, phraseRelativeTime / phraseDuration))
+        
+        if abs(progress - playbackProgress) > 0.005 {
+            DispatchQueue.main.async { [weak self] in
+                self?.playbackProgress = progress
+            }
+        }
     }
     
     private func fillSilence(audioBufferList: UnsafeMutablePointer<AudioBufferList>, frameCount: UInt32) {
@@ -542,14 +459,23 @@ class HyperPhrasePlayer: ObservableObject {
         }
     }
     
-    // MARK: - Buffer Loading
+    // MARK: - Song Loading
     
-    private func loadBuffer(for phrase: PhraseNode, completion: @escaping (AVAudioPCMBuffer?) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let url = URL(fileURLWithPath: phrase.audioFile)
+    /// Load a full song file (with caching)
+    private func loadSong(path: String, completion: @escaping (AVAudioPCMBuffer?) -> Void) {
+        // Check cache first
+        if let cached = songCache[path] {
+            completion(cached)
+            return
+        }
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            let url = URL(fileURLWithPath: path)
             
             guard FileManager.default.fileExists(atPath: url.path) else {
-                print("[HyperPhrasePlayer] Audio file not found: \(phrase.audioFile)")
+                print("[HyperPhrasePlayer] Song not found: \(path)")
                 completion(nil)
                 return
             }
@@ -559,17 +485,42 @@ class HyperPhrasePlayer: ObservableObject {
                 let format = AVAudioFormat(standardFormatWithSampleRate: self.sampleRate, channels: 2)!
                 
                 guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(file.length)) else {
+                    print("[HyperPhrasePlayer] Failed to create buffer for: \(path)")
                     completion(nil)
                     return
                 }
                 
                 try file.read(into: buffer)
+                
+                // Cache the loaded song
+                DispatchQueue.main.async {
+                    self.songCache[path] = buffer
+                    print("[HyperPhrasePlayer] Cached song: \(URL(fileURLWithPath: path).lastPathComponent) (\(buffer.frameLength) samples)")
+                }
+                
                 completion(buffer)
             } catch {
-                print("[HyperPhrasePlayer] Error loading buffer: \(error)")
+                print("[HyperPhrasePlayer] Error loading song: \(error)")
                 completion(nil)
             }
         }
+    }
+    
+    /// Get phrase at a given song position
+    private func getPhraseAtPosition(_ samplePosition: Int, inSong songPath: String) -> PhraseNode? {
+        let timePosition = Double(samplePosition) / sampleRate
+        let trackPhrases = database.getPhrasesForTrack(songPath)
+        
+        for phrase in trackPhrases {
+            let start = phrase.startTime ?? 0
+            let end = phrase.endTime ?? phrase.duration
+            if timePosition >= start && timePosition < end {
+                return phrase
+            }
+        }
+        
+        // If past all phrases, return the last one
+        return trackPhrases.last
     }
     
     // MARK: - Helpers
@@ -601,49 +552,6 @@ class HyperPhrasePlayer: ObservableObject {
         return false
     }
     
-    /// Execute a direct cut to the next phrase (no fade/transition)
-    private func executeDirectCut() {
-        // Swap buffers
-        currentBuffer = nextBuffer
-        nextBuffer = nil
-        state.playbackPosition = 0
-        
-        // Update state
-        if let next = state.nextPhrase {
-            state.currentPhrase = next
-            
-            // Select new next phrase
-            let links = database.getLinks(for: next.id)
-            let alternatives = database.getAlternatives(for: next.id, limit: 8)
-            
-            // Prefer same track sequence for auto-queue
-            let newNext: PhraseNode?
-            if let seqNext = database.getNextInSequence(for: next.id) {
-                newNext = seqNext
-            } else {
-                newNext = links.first.flatMap { database.getPhrase(id: $0.targetId) }
-            }
-            
-            state.nextPhrase = newNext
-            
-            if let newNextPhrase = newNext {
-                loadBuffer(for: newNextPhrase) { [weak self] buffer in
-                    self?.stateLock.lock()
-                    self?.nextBuffer = buffer
-                    self?.stateLock.unlock()
-                }
-            }
-            
-            // Update published properties
-            DispatchQueue.main.async {
-                self.currentPhrase = next
-                self.nextPhrase = newNext
-                self.availableLinks = links
-                self.alternativePhrases = alternatives
-            }
-        }
-    }
-    
     /// Check if the transition from current to next phrase is sequential (same track, next segment)
     private func isSequentialTransition() -> Bool {
         guard let current = state.currentPhrase,
@@ -654,43 +562,6 @@ class HyperPhrasePlayer: ObservableObject {
         // Same track and next segment index
         return current.sourceTrack == next.sourceTrack &&
                next.trackIndex == current.trackIndex + 1
-    }
-    
-    /// Complete a gapless transition (same track, sequential segment)
-    private func completeGaplessTransition() {
-        // Swap buffers
-        currentBuffer = nextBuffer
-        nextBuffer = nil
-        
-        // Update state
-        if let next = state.nextPhrase {
-            state.currentPhrase = next
-            state.playbackPosition = 0  // Start from beginning
-            
-            // Select new next phrase
-            let links = database.getLinks(for: next.id)
-            let alternatives = database.getAlternatives(for: next.id, limit: 8)
-            
-            // For gapless, always prefer same track sequence
-            let newNext = database.getNextInSequence(for: next.id)
-            state.nextPhrase = newNext
-            
-            if let newNextPhrase = newNext {
-                loadBuffer(for: newNextPhrase) { [weak self] buffer in
-                    self?.stateLock.lock()
-                    self?.nextBuffer = buffer
-                    self?.stateLock.unlock()
-                }
-            }
-            
-            // Update published properties
-            DispatchQueue.main.async {
-                self.currentPhrase = next
-                self.nextPhrase = newNext
-                self.availableLinks = links
-                self.alternativePhrases = alternatives
-            }
-        }
     }
     
     private func transitionTypeFromString(_ string: String) -> TransitionEngine.TransitionType {
