@@ -411,15 +411,21 @@ struct HyperPhraseView: View {
         LinearGradient(colors: [.green, .yellow, .orange, .red], startPoint: .leading, endPoint: .trailing)
     }
     
-    /// Tap to immediately transition to a phrase
+    /// Tap to queue a phrase for playback at end of current phrase
+    /// 
+    /// Behavior B: Switch at phrase boundary (default)
+    /// - Queues the phrase, current phrase plays to end, then switches
+    /// 
+    /// TODO: Future option A (quick switch):
+    /// - Immediate beat-aligned cut using player.triggerTransition()
+    /// - Could be triggered by double-tap or modifier key
     private func transitionTo(_ phrase: PhraseNode) {
         player.queueNext(phrase)
-        if player.isPlaying {
-            player.triggerTransition()
-        } else {
+        if !player.isPlaying {
             // Start playback if not already playing
             try? player.start()
         }
+        // Note: If playing, just queue - switch happens at phrase end
     }
     
     // MARK: - Matrix View
