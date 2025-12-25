@@ -40,9 +40,17 @@ struct HyperPhraseView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Top: Dual deck mixer
-            dualDeckMixer
-                .frame(height: 200)
+            // Top: Main output waveform (full width, scrolling with playhead)
+            mainWaveformStrip
+                .frame(height: 100)
+            
+            // EQ/Mixer strip
+            eqMixerStrip
+                .frame(height: 60)
+            
+            // Cue/Preview waveform
+            cueWaveformStrip
+                .frame(height: 80)
             
             Divider()
             
@@ -61,11 +69,9 @@ struct HyperPhraseView: View {
             setupAudio()
         }
         .onChange(of: player.currentPhrase?.id) { _, newId in
-            // Sync Deck A with player's current phrase
             syncDeckAWithPlayer()
         }
         .onChange(of: player.isPlaying) { _, isPlaying in
-            // Sync deck A playback state
             if isPlaying && deckA.currentPhrase != nil && !deckA.isPlaying {
                 deckA.play()
             } else if !isPlaying && deckA.isPlaying {
@@ -104,221 +110,273 @@ struct HyperPhraseView: View {
         }
     }
     
-    // MARK: - Dual Deck Mixer
+    // MARK: - Main Waveform Strip (Full Width, Scrolling)
     
-    private var dualDeckMixer: some View {
-        HStack(spacing: 0) {
-            // Deck A - Main/Current
-            deckPanel(deck: deckA, title: "A", color: .orange, isMain: true)
-                .frame(maxWidth: .infinity)
-            
-            // Center controls
-            mixerCenterControls
-                .frame(width: 140)
-            
-            // Deck B - Cue/Preview
-            deckPanel(deck: deckB, title: "B", color: .cyan, isMain: false)
-                .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color(white: 0.08))
-    }
-    
-    private func deckPanel(deck: Deck, title: String, color: Color, isMain: Bool) -> some View {
-        VStack(spacing: 8) {
-            // Header
+    private var mainWaveformStrip: some View {
+        VStack(spacing: 0) {
+            // Track info bar
             HStack {
-                Text("DECK \(title)")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(color)
-                
-                Spacer()
-                
-                if let phrase = deck.currentPhrase {
-                    Text("\(phrase.bpm) BPM")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white)
-                }
-            }
-            
-            // Waveform
-            if let phrase = deck.currentPhrase, let waveform = phrase.waveform {
-                WaveformView(
-                    waveform: waveform,
-                    playbackProgress: deck.playbackPosition,
-                    showPlayhead: true,
-                    height: 50
-                )
-                .onTapGesture { location in
-                    // TODO: Seek on click
-                }
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(height: 50)
-                    .overlay(
-                        Text(isMain ? "Load from graph" : "Click branch to cue")
-                            .font(.caption)
+                if let phrase = player.currentPhrase {
+                    // Left: Track info
+                    HStack(spacing: 8) {
+                        Text("▶")
+                            .font(.system(size: 12))
+                            .foregroundColor(.orange)
+                        
+                        Text(phrase.sourceTrackName)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        
+                        Text(phrase.segmentType)
+                            .font(.system(size: 10, weight: .bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(segmentColor(phrase.segmentType).opacity(0.3))
+                            .foregroundColor(segmentColor(phrase.segmentType))
+                            .cornerRadius(4)
+                        
+                        Text("#\(phrase.sequenceNumber)")
+                            .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(.secondary)
-                    )
-            }
-            
-            // Track info
-            if let phrase = deck.currentPhrase {
-                HStack {
-                    Text(phrase.sourceTrackName)
-                        .font(.system(size: 10))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
+                    }
                     
                     Spacer()
                     
-                    Text(phrase.segmentType)
+                    // Right: BPM and time
+                    HStack(spacing: 12) {
+                        Text("\(phrase.bpm)")
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundColor(.orange)
+                        + Text(" BPM")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                        
+                        Text(formatTime(player.playbackProgress * (phrase.duration)))
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(.white)
+                    }
+                } else {
+                    Text("No track loaded")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(Color(white: 0.1))
+            
+            // Scrolling waveform with centered playhead
+            ScrollingWaveformView(
+                phrase: player.currentPhrase,
+                playbackProgress: player.playbackProgress,
+                color: .orange
+            )
+        }
+        .background(Color.black)
+    }
+    
+    // MARK: - EQ/Mixer Strip
+    
+    private var eqMixerStrip: some View {
+        HStack(spacing: 0) {
+            // Main deck EQ (left side)
+            HStack(spacing: 16) {
+                Text("MAIN")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.orange)
+                    .frame(width: 35)
+                
+                eqControl(label: "LOW", value: Binding(
+                    get: { deckA.eqLow },
+                    set: { deckA.eqLow = $0 }
+                ), color: .blue)
+                
+                eqControl(label: "MID", value: Binding(
+                    get: { deckA.eqMid },
+                    set: { deckA.eqMid = $0 }
+                ), color: .green)
+                
+                eqControl(label: "HIGH", value: Binding(
+                    get: { deckA.eqHigh },
+                    set: { deckA.eqHigh = $0 }
+                ), color: .orange)
+            }
+            .padding(.horizontal, 12)
+            
+            Spacer()
+            
+            // Center: GO button + status
+            VStack(spacing: 4) {
+                if let queued = player.nextPhrase {
+                    Text("⏭ \(queued.segmentType)")
                         .font(.system(size: 9, weight: .bold))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(segmentColor(phrase.segmentType).opacity(0.3))
-                        .foregroundColor(segmentColor(phrase.segmentType))
-                        .cornerRadius(3)
+                        .foregroundColor(.green)
+                }
+                
+                HStack(spacing: 8) {
+                    Button(action: { executeTransition() }) {
+                        Text("GO")
+                            .font(.system(size: 12, weight: .bold))
+                            .frame(width: 50, height: 28)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(player.nextPhrase?.id == deckB.currentPhrase?.id ? .gray : .green)
+                    .disabled(deckB.currentPhrase == nil)
+                    
+                    // Quick rating
+                    HStack(spacing: 4) {
+                        Button(action: { rateTransition(-1) }) {
+                            Image(systemName: "hand.thumbsdown.fill")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.red)
+                        
+                        Button(action: { rateTransition(1) }) {
+                            Image(systemName: "hand.thumbsup.fill")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.green)
+                    }
+                    .opacity(lastTransition != nil ? 1 : 0.3)
                 }
             }
             
-            // Transport + EQ row
-            HStack(spacing: 12) {
-                // Transport
-                HStack(spacing: 8) {
-                    Button(action: { deck.seekToPreviousBeat() }) {
-                        Image(systemName: "backward.fill")
-                            .font(.system(size: 10))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.white)
-                    
-                    Button(action: { deck.togglePlayPause() }) {
-                        Image(systemName: deck.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 14))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(color)
-                    
-                    Button(action: { deck.seekToNextBeat() }) {
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: 10))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.white)
+            Spacer()
+            
+            // Cue deck EQ (right side)
+            HStack(spacing: 16) {
+                eqControl(label: "LOW", value: Binding(
+                    get: { deckB.eqLow },
+                    set: { deckB.eqLow = $0 }
+                ), color: .blue)
+                
+                eqControl(label: "MID", value: Binding(
+                    get: { deckB.eqMid },
+                    set: { deckB.eqMid = $0 }
+                ), color: .green)
+                
+                eqControl(label: "HIGH", value: Binding(
+                    get: { deckB.eqHigh },
+                    set: { deckB.eqHigh = $0 }
+                ), color: .orange)
+                
+                Text("CUE")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.cyan)
+                    .frame(width: 35)
+                
+                Toggle(isOn: $cueEnabled) {
+                    Image(systemName: "headphones")
                 }
-                
-                Spacer()
-                
-                // EQ mini controls
-                HStack(spacing: 8) {
-                    miniEQSlider(label: "L", value: Binding(
-                        get: { deck.eqLow },
-                        set: { deck.eqLow = $0 }
-                    ), color: .blue)
-                    
-                    miniEQSlider(label: "M", value: Binding(
-                        get: { deck.eqMid },
-                        set: { deck.eqMid = $0 }
-                    ), color: .green)
-                    
-                    miniEQSlider(label: "H", value: Binding(
-                        get: { deck.eqHigh },
-                        set: { deck.eqHigh = $0 }
-                    ), color: .orange)
-                }
-                
-                // Volume
-                Slider(value: Binding(
-                    get: { Double(deck.volume) },
-                    set: { deck.volume = Float($0) }
-                ), in: 0...1)
-                .frame(width: 60)
-                .accentColor(color)
+                .toggleStyle(.button)
+                .buttonStyle(.bordered)
+                .tint(.cyan)
+                .controlSize(.small)
             }
+            .padding(.horizontal, 12)
         }
-        .padding(8)
-        .background(Color(white: 0.12))
-        .cornerRadius(8)
+        .padding(.vertical, 6)
+        .background(Color(white: 0.08))
     }
     
-    private func miniEQSlider(label: String, value: Binding<Float>, color: Color) -> some View {
+    private func eqControl(label: String, value: Binding<Float>, color: Color) -> some View {
         VStack(spacing: 2) {
             Text(label)
                 .font(.system(size: 8, weight: .bold))
                 .foregroundColor(color)
             
             Slider(value: value, in: -12...12)
-                .frame(width: 40)
+                .frame(width: 50)
                 .accentColor(value.wrappedValue <= -50 ? .red : color)
+        }
+        .onTapGesture(count: 2) {
+            // Double-tap to kill/restore
+            if value.wrappedValue > -50 {
+                value.wrappedValue = -60
+            } else {
+                value.wrappedValue = 0
+            }
         }
     }
     
-    private var mixerCenterControls: some View {
-        VStack(spacing: 10) {
-            // CUE toggle
-            Toggle(isOn: $cueEnabled) {
-                Text("CUE")
-                    .font(.system(size: 10, weight: .bold))
-            }
-            .toggleStyle(.button)
-            .buttonStyle(.bordered)
-            .tint(.cyan)
-            .controlSize(.small)
-            
-            // Queued indicator
-            if let queued = player.nextPhrase {
-                VStack(spacing: 2) {
-                    Text("QUEUED")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(.green)
-                    Text(queued.segmentType)
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
-            
-            // GO button - queue for phrase boundary
-            Button(action: { executeTransition() }) {
-                VStack(spacing: 2) {
-                    Text("GO")
-                        .font(.system(size: 14, weight: .bold))
-                    if deckB.currentPhrase != nil && player.nextPhrase?.id != deckB.currentPhrase?.id {
-                        Text("queue")
-                            .font(.system(size: 8))
+    // MARK: - Cue Waveform Strip
+    
+    private var cueWaveformStrip: some View {
+        VStack(spacing: 0) {
+            // Track info bar
+            HStack {
+                if let phrase = deckB.currentPhrase {
+                    HStack(spacing: 8) {
+                        Text("CUE")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.cyan)
+                        
+                        Text(phrase.sourceTrackName)
+                            .font(.system(size: 11))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        
+                        Text(phrase.segmentType)
+                            .font(.system(size: 9, weight: .bold))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(segmentColor(phrase.segmentType).opacity(0.3))
+                            .foregroundColor(segmentColor(phrase.segmentType))
+                            .cornerRadius(3)
+                        
+                        Spacer()
+                        
+                        Text("\(phrase.bpm) BPM")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.cyan)
+                        
+                        // Transport
+                        HStack(spacing: 8) {
+                            Button(action: { deckB.seekToPreviousBeat() }) {
+                                Image(systemName: "backward.fill")
+                                    .font(.system(size: 10))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.white)
+                            
+                            Button(action: { deckB.togglePlayPause() }) {
+                                Image(systemName: deckB.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.cyan)
+                            
+                            Button(action: { deckB.seekToNextBeat() }) {
+                                Image(systemName: "forward.fill")
+                                    .font(.system(size: 10))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.white)
+                        }
                     }
+                } else {
+                    Text("Click a branch option to load into CUE")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
                 }
-                .frame(width: 55, height: 35)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(player.nextPhrase?.id == deckB.currentPhrase?.id ? .gray : .green)
-            .disabled(deckB.currentPhrase == nil)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(Color(white: 0.06))
             
-            // Quick rating
-            HStack(spacing: 4) {
-                Button(action: { rateTransition(-1) }) {
-                    Image(systemName: "hand.thumbsdown.fill")
-                        .font(.system(size: 10))
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.red)
-                
-                Button(action: { rateTransition(1) }) {
-                    Image(systemName: "hand.thumbsup.fill")
-                        .font(.system(size: 10))
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.green)
-            }
-            .opacity(lastTransition != nil ? 1 : 0.3)
-            
-            Spacer()
+            // Cue waveform
+            ScrollingWaveformView(
+                phrase: deckB.currentPhrase,
+                playbackProgress: deckB.playbackPosition,
+                color: .cyan
+            )
         }
-        .padding(.vertical, 8)
-        .background(Color(white: 0.05))
+        .background(Color.black)
     }
     
     /// Execute transition: queue deck B for phrase boundary switch
@@ -326,19 +384,22 @@ struct HyperPhraseView: View {
         guard let phraseB = deckB.currentPhrase else { return }
         
         // Log transition if session active
-        if let phraseA = deckA.currentPhrase, isSessionActive {
+        if let phraseA = player.currentPhrase, isSessionActive {
             logTransition(from: phraseA, to: phraseB)
         }
         
         // Queue phrase B - will switch at phrase boundary
         player.queueNext(phraseB)
         
-        // Visual feedback: the branch card will show as "queued"
-        // Actual switch happens when current phrase ends
-        // Deck A will sync automatically via onChange handler
-        
         // Stop cue playback
         deckB.pause()
+    }
+    
+    private func formatTime(_ seconds: Double) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        let ms = Int((seconds.truncatingRemainder(dividingBy: 1)) * 10)
+        return String(format: "%d:%02d.%d", mins, secs, ms)
     }
     
     // MARK: - Control Panel
