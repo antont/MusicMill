@@ -1,14 +1,21 @@
 import SwiftUI
 import Combine
+import CoreAudio
 
 /// HyperPhraseView - Graph navigation interface for HyperMusic
 ///
 /// Displays the current phrase in the center with navigable links to
 /// compatible phrases, enabling smooth DJ-style transitions across
 /// the entire music collection.
+///
+/// Includes dual-deck DJ controls for professional mixing.
 struct HyperPhraseView: View {
     @StateObject private var player = HyperPhrasePlayer()
     @StateObject private var relationshipDB = RelationshipDatabase()
+    @StateObject private var deckA = Deck(id: .a)  // Main/current deck
+    @StateObject private var deckB = Deck(id: .b)  // Cue/preview deck
+    @StateObject private var audioRouter = AudioRouter()
+    
     @State private var isLoading = true
     @State private var loadError: String?
     @State private var transitionBars: Int = 2
@@ -17,16 +24,13 @@ struct HyperPhraseView: View {
     @State private var masterVolume: Float = 1.0
     @State private var viewMode: ViewMode = .radial
     
-    // DJ Controls
-    @State private var eqLow: Float = 0
-    @State private var eqMid: Float = 0
-    @State private var eqHigh: Float = 0
-    
     // Session/Performance tracking
     @State private var isSessionActive = false
     @State private var sessionType: RelationshipDatabase.SessionType = .practice
     @State private var lastTransition: (from: String, to: String)?
-    @State private var showRatingPopup = false
+    
+    // Cue monitoring
+    @State private var cueEnabled = false
     
     enum ViewMode: String, CaseIterable {
         case radial = "Radial"
@@ -35,17 +39,258 @@ struct HyperPhraseView: View {
     }
     
     var body: some View {
-        HSplitView {
-            // Left panel: Controls
-            controlPanel
-                .frame(minWidth: 250, idealWidth: 280, maxWidth: 320)
+        VStack(spacing: 0) {
+            // Top: Dual deck mixer
+            dualDeckMixer
+                .frame(height: 200)
             
-            // Main area: Graph navigation
-            mainNavigationArea
+            Divider()
+            
+            // Bottom: Graph navigation + controls
+            HSplitView {
+                // Left panel: Controls
+                controlPanel
+                    .frame(minWidth: 220, idealWidth: 250, maxWidth: 300)
+                
+                // Main area: Graph navigation
+                mainNavigationArea
+            }
         }
         .onAppear {
             loadGraph()
+            setupAudio()
         }
+    }
+    
+    // MARK: - Audio Setup
+    
+    private func setupAudio() {
+        do {
+            try audioRouter.startMainEngine()
+        } catch {
+            print("HyperPhraseView: Failed to start audio: \(error)")
+        }
+    }
+    
+    // MARK: - Dual Deck Mixer
+    
+    private var dualDeckMixer: some View {
+        HStack(spacing: 0) {
+            // Deck A - Main/Current
+            deckPanel(deck: deckA, title: "A", color: .orange, isMain: true)
+                .frame(maxWidth: .infinity)
+            
+            // Center controls
+            mixerCenterControls
+                .frame(width: 140)
+            
+            // Deck B - Cue/Preview
+            deckPanel(deck: deckB, title: "B", color: .cyan, isMain: false)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color(white: 0.08))
+    }
+    
+    private func deckPanel(deck: Deck, title: String, color: Color, isMain: Bool) -> some View {
+        VStack(spacing: 8) {
+            // Header
+            HStack {
+                Text("DECK \(title)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(color)
+                
+                Spacer()
+                
+                if let phrase = deck.currentPhrase {
+                    Text("\(phrase.bpm) BPM")
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white)
+                }
+            }
+            
+            // Waveform
+            if let phrase = deck.currentPhrase, let waveform = phrase.waveform {
+                WaveformView(
+                    waveform: waveform,
+                    playbackProgress: deck.playbackPosition,
+                    showPlayhead: true,
+                    height: 50
+                )
+                .onTapGesture { location in
+                    // TODO: Seek on click
+                }
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(height: 50)
+                    .overlay(
+                        Text(isMain ? "Load from graph" : "Click branch to cue")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    )
+            }
+            
+            // Track info
+            if let phrase = deck.currentPhrase {
+                HStack {
+                    Text(phrase.sourceTrackName)
+                        .font(.system(size: 10))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Text(phrase.segmentType)
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(segmentColor(phrase.segmentType).opacity(0.3))
+                        .foregroundColor(segmentColor(phrase.segmentType))
+                        .cornerRadius(3)
+                }
+            }
+            
+            // Transport + EQ row
+            HStack(spacing: 12) {
+                // Transport
+                HStack(spacing: 8) {
+                    Button(action: { deck.seekToPreviousBeat() }) {
+                        Image(systemName: "backward.fill")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.white)
+                    
+                    Button(action: { deck.togglePlayPause() }) {
+                        Image(systemName: deck.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(color)
+                    
+                    Button(action: { deck.seekToNextBeat() }) {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.white)
+                }
+                
+                Spacer()
+                
+                // EQ mini controls
+                HStack(spacing: 8) {
+                    miniEQSlider(label: "L", value: Binding(
+                        get: { deck.eqLow },
+                        set: { deck.eqLow = $0 }
+                    ), color: .blue)
+                    
+                    miniEQSlider(label: "M", value: Binding(
+                        get: { deck.eqMid },
+                        set: { deck.eqMid = $0 }
+                    ), color: .green)
+                    
+                    miniEQSlider(label: "H", value: Binding(
+                        get: { deck.eqHigh },
+                        set: { deck.eqHigh = $0 }
+                    ), color: .orange)
+                }
+                
+                // Volume
+                Slider(value: Binding(
+                    get: { Double(deck.volume) },
+                    set: { deck.volume = Float($0) }
+                ), in: 0...1)
+                .frame(width: 60)
+                .accentColor(color)
+            }
+        }
+        .padding(8)
+        .background(Color(white: 0.12))
+        .cornerRadius(8)
+    }
+    
+    private func miniEQSlider(label: String, value: Binding<Float>, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundColor(color)
+            
+            Slider(value: value, in: -12...12)
+                .frame(width: 40)
+                .accentColor(value.wrappedValue <= -50 ? .red : color)
+        }
+    }
+    
+    private var mixerCenterControls: some View {
+        VStack(spacing: 12) {
+            // CUE toggle
+            Toggle(isOn: $cueEnabled) {
+                Text("CUE")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .toggleStyle(.button)
+            .buttonStyle(.bordered)
+            .tint(.cyan)
+            .controlSize(.small)
+            
+            // GO button - execute transition
+            Button(action: { executeTransition() }) {
+                Text("GO")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 50, height: 30)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            .disabled(deckB.currentPhrase == nil)
+            
+            // Quick rating
+            HStack(spacing: 4) {
+                Button(action: { rateTransition(-1) }) {
+                    Image(systemName: "hand.thumbsdown.fill")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.red)
+                
+                Button(action: { rateTransition(1) }) {
+                    Image(systemName: "hand.thumbsup.fill")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.green)
+            }
+            .opacity(lastTransition != nil ? 1 : 0.3)
+            
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .background(Color(white: 0.05))
+    }
+    
+    /// Execute transition: move deck B to main, log event
+    private func executeTransition() {
+        guard let phraseB = deckB.currentPhrase else { return }
+        
+        // Log transition if session active
+        if let phraseA = deckA.currentPhrase, isSessionActive {
+            logTransition(from: phraseA, to: phraseB)
+        }
+        
+        // Load phrase B into the player (which controls deck A)
+        player.queueNext(phraseB)
+        player.triggerTransition()
+        
+        // Also update deck A to show the new phrase
+        Task {
+            try? await deckA.load(phraseB)
+            deckA.play()
+        }
+        
+        // Clear deck B
+        deckB.unload()
     }
     
     // MARK: - Control Panel
@@ -54,7 +299,7 @@ struct HyperPhraseView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("HyperMusic")
-                    .font(.title)
+                    .font(.title2)
                     .fontWeight(.bold)
                 
                 if isLoading {
@@ -79,11 +324,7 @@ struct HyperPhraseView: View {
                     Divider()
                     playbackControls
                     Divider()
-                    eqControls
-                    Divider()
                     transitionSettings
-                    Divider()
-                    ratingControls
                     Divider()
                     viewModeSelector
                 }
@@ -252,58 +493,6 @@ struct HyperPhraseView: View {
                     .tint(.red)
                 }
             }
-        }
-    }
-    
-    // MARK: - EQ Controls
-    
-    private var eqControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("EQ")
-                .font(.headline)
-            
-            HStack(spacing: 16) {
-                eqKnob(label: "LOW", value: $eqLow, color: .blue)
-                eqKnob(label: "MID", value: $eqMid, color: .green)
-                eqKnob(label: "HIGH", value: $eqHigh, color: .orange)
-            }
-            
-            Button("Reset EQ") {
-                eqLow = 0
-                eqMid = 0
-                eqHigh = 0
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-    }
-    
-    private func eqKnob(label: String, value: Binding<Float>, color: Color) -> some View {
-        VStack(spacing: 4) {
-            Text(label)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundColor(color)
-            
-            // Vertical slider
-            Slider(value: value, in: -12...12)
-                .frame(width: 60)
-            
-            // Value display
-            Text(String(format: "%.0f", value.wrappedValue))
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundColor(.secondary)
-            
-            // Kill button
-            Button(value.wrappedValue <= -50 ? "ON" : "KILL") {
-                if value.wrappedValue > -50 {
-                    value.wrappedValue = -60
-                } else {
-                    value.wrappedValue = 0
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
-            .tint(value.wrappedValue <= -50 ? .red : nil)
         }
     }
     
@@ -584,26 +773,41 @@ struct HyperPhraseView: View {
         LinearGradient(colors: [.green, .yellow, .orange, .red], startPoint: .leading, endPoint: .trailing)
     }
     
-    /// Tap to queue a phrase for playback at end of current phrase
+    /// Tap to load a phrase into the cue deck (B) for preview
     /// 
-    /// Behavior B: Switch at phrase boundary (default)
-    /// - Queues the phrase, current phrase plays to end, then switches
-    /// 
-    /// TODO: Future option A (quick switch):
-    /// - Immediate beat-aligned cut using player.triggerTransition()
-    /// - Could be triggered by double-tap or modifier key
+    /// The phrase is loaded into deck B where you can:
+    /// - Pre-listen via CUE button
+    /// - Adjust EQ before transition
+    /// - Hit GO when ready to transition
     private func transitionTo(_ phrase: PhraseNode) {
-        // Log the transition if session is active
-        if let current = player.currentPhrase, isSessionActive {
-            logTransition(from: current, to: phrase)
+        // Load into deck B (cue)
+        Task {
+            do {
+                try await deckB.load(phrase)
+                // Auto-play cue if enabled
+                if cueEnabled {
+                    deckB.play()
+                }
+            } catch {
+                print("HyperPhraseView: Failed to load cue: \(error)")
+            }
         }
         
+        // Also queue in player for auto-advance if enabled
         player.queueNext(phrase)
+        
         if !player.isPlaying {
             // Start playback if not already playing
             try? player.start()
+            
+            // Also sync deck A with player's current phrase
+            if let current = player.currentPhrase {
+                Task {
+                    try? await deckA.load(current)
+                    deckA.play()
+                }
+            }
         }
-        // Note: If playing, just queue - switch happens at phrase end
     }
     
     // MARK: - Matrix View
@@ -817,10 +1021,11 @@ struct HyperPhraseView: View {
         guard isSessionActive else { return }
         
         do {
+            // Use deck B's EQ settings (the incoming track)
             let context = RelationshipDatabase.EventContext(
-                eqLow: eqLow,
-                eqMid: eqMid,
-                eqHigh: eqHigh,
+                eqLow: deckB.eqLow,
+                eqMid: deckB.eqMid,
+                eqHigh: deckB.eqHigh,
                 bars: transitionBars,
                 tempoDiff: Double(to.bpm - from.bpm)
             )
