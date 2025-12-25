@@ -8,6 +8,7 @@ import Combine
 /// the entire music collection.
 struct HyperPhraseView: View {
     @StateObject private var player = HyperPhrasePlayer()
+    @StateObject private var relationshipDB = RelationshipDatabase()
     @State private var isLoading = true
     @State private var loadError: String?
     @State private var transitionBars: Int = 2
@@ -15,6 +16,17 @@ struct HyperPhraseView: View {
     @State private var preferSameTrack: Bool = false
     @State private var masterVolume: Float = 1.0
     @State private var viewMode: ViewMode = .radial
+    
+    // DJ Controls
+    @State private var eqLow: Float = 0
+    @State private var eqMid: Float = 0
+    @State private var eqHigh: Float = 0
+    
+    // Session/Performance tracking
+    @State private var isSessionActive = false
+    @State private var sessionType: RelationshipDatabase.SessionType = .practice
+    @State private var lastTransition: (from: String, to: String)?
+    @State private var showRatingPopup = false
     
     enum ViewMode: String, CaseIterable {
         case radial = "Radial"
@@ -39,39 +51,47 @@ struct HyperPhraseView: View {
     // MARK: - Control Panel
     
     private var controlPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("HyperMusic")
-                .font(.title)
-                .fontWeight(.bold)
-            
-            if isLoading {
-                ProgressView("Loading phrase graph...")
-            } else if let error = loadError {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Error")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Button("Build Graph") {
-                        buildGraph()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("HyperMusic")
+                    .font(.title)
+                    .fontWeight(.bold)
+                
+                if isLoading {
+                    ProgressView("Loading phrase graph...")
+                } else if let error = loadError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Error")
+                            .font(.headline)
+                            .foregroundColor(.red)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Button("Build Graph") {
+                            buildGraph()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
+                } else {
+                    graphStats
+                    Divider()
+                    sessionControls
+                    Divider()
+                    playbackControls
+                    Divider()
+                    eqControls
+                    Divider()
+                    transitionSettings
+                    Divider()
+                    ratingControls
+                    Divider()
+                    viewModeSelector
                 }
-            } else {
-                graphStats
-                Divider()
-                playbackControls
-                Divider()
-                transitionSettings
-                Divider()
-                viewModeSelector
+                
+                Spacer()
             }
-            
-            Spacer()
+            .padding()
         }
-        .padding()
         .background(Color(NSColor.controlBackgroundColor))
     }
     
@@ -182,6 +202,147 @@ struct HyperPhraseView: View {
                 }
             }
             .pickerStyle(.segmented)
+        }
+    }
+    
+    // MARK: - Session Controls
+    
+    private var sessionControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Session")
+                    .font(.headline)
+                
+                Spacer()
+                
+                if isSessionActive {
+                    Circle()
+                        .fill(sessionType == .performance ? Color.red : Color.orange)
+                        .frame(width: 8, height: 8)
+                }
+            }
+            
+            if isSessionActive {
+                HStack {
+                    Text(sessionType == .performance ? "🎧 Live" : "🎯 Practice")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Button("End") {
+                        endSession()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Button("Practice") {
+                        startSession(type: .practice)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    
+                    Button("Perform") {
+                        startSession(type: .performance)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(.red)
+                }
+            }
+        }
+    }
+    
+    // MARK: - EQ Controls
+    
+    private var eqControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("EQ")
+                .font(.headline)
+            
+            HStack(spacing: 16) {
+                eqKnob(label: "LOW", value: $eqLow, color: .blue)
+                eqKnob(label: "MID", value: $eqMid, color: .green)
+                eqKnob(label: "HIGH", value: $eqHigh, color: .orange)
+            }
+            
+            Button("Reset EQ") {
+                eqLow = 0
+                eqMid = 0
+                eqHigh = 0
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+    
+    private func eqKnob(label: String, value: Binding<Float>, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(color)
+            
+            // Vertical slider
+            Slider(value: value, in: -12...12)
+                .frame(width: 60)
+            
+            // Value display
+            Text(String(format: "%.0f", value.wrappedValue))
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.secondary)
+            
+            // Kill button
+            Button(value.wrappedValue <= -50 ? "ON" : "KILL") {
+                if value.wrappedValue > -50 {
+                    value.wrappedValue = -60
+                } else {
+                    value.wrappedValue = 0
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .tint(value.wrappedValue <= -50 ? .red : nil)
+        }
+    }
+    
+    // MARK: - Rating Controls
+    
+    private var ratingControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Rate Transition")
+                .font(.headline)
+            
+            if let last = lastTransition {
+                HStack(spacing: 12) {
+                    Button(action: { rateTransition(-1) }) {
+                        Image(systemName: "hand.thumbsdown.fill")
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button(action: { rateTransition(0) }) {
+                        Image(systemName: "minus.circle")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button(action: { rateTransition(1) }) {
+                        Image(systemName: "hand.thumbsup.fill")
+                            .foregroundColor(.green)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                
+                Text("Last: transition queued")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Make a transition to rate it")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
     
@@ -432,6 +593,11 @@ struct HyperPhraseView: View {
     /// - Immediate beat-aligned cut using player.triggerTransition()
     /// - Could be triggered by double-tap or modifier key
     private func transitionTo(_ phrase: PhraseNode) {
+        // Log the transition if session is active
+        if let current = player.currentPhrase, isSessionActive {
+            logTransition(from: current, to: phrase)
+        }
+        
         player.queueNext(phrase)
         if !player.isPlaying {
             // Start playback if not already playing
@@ -596,6 +762,13 @@ struct HyperPhraseView: View {
         isLoading = true
         loadError = nil
         
+        // Open relationship database
+        do {
+            try relationshipDB.open()
+        } catch {
+            print("HyperPhraseView: Failed to open relationship DB: \(error)")
+        }
+        
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try player.loadGraph()
@@ -614,6 +787,68 @@ struct HyperPhraseView: View {
     private func buildGraph() {
         // TODO: Run build_phrase_graph.py script
         loadError = "Please run: python scripts/build_phrase_graph.py path/to/librosa_analysis.json"
+    }
+    
+    // MARK: - Session Management
+    
+    private func startSession(type: RelationshipDatabase.SessionType) {
+        do {
+            _ = try relationshipDB.startSession(type: type)
+            sessionType = type
+            isSessionActive = true
+        } catch {
+            print("HyperPhraseView: Failed to start session: \(error)")
+        }
+    }
+    
+    private func endSession() {
+        do {
+            try relationshipDB.endSession(notes: nil)
+            isSessionActive = false
+            lastTransition = nil
+        } catch {
+            print("HyperPhraseView: Failed to end session: \(error)")
+        }
+    }
+    
+    // MARK: - Transition Logging
+    
+    private func logTransition(from: PhraseNode, to: PhraseNode) {
+        guard isSessionActive else { return }
+        
+        do {
+            let context = RelationshipDatabase.EventContext(
+                eqLow: eqLow,
+                eqMid: eqMid,
+                eqHigh: eqHigh,
+                bars: transitionBars,
+                tempoDiff: Double(to.bpm - from.bpm)
+            )
+            
+            let source: RelationshipDatabase.EventSource = sessionType == .performance ? .performance : .practice
+            
+            try relationshipDB.logPlayed(
+                from: from.id,
+                to: to.id,
+                source: source,
+                context: context
+            )
+            
+            lastTransition = (from: from.id, to: to.id)
+        } catch {
+            print("HyperPhraseView: Failed to log transition: \(error)")
+        }
+    }
+    
+    private func rateTransition(_ rating: Int) {
+        guard let last = lastTransition else { return }
+        
+        do {
+            let source: RelationshipDatabase.EventSource = sessionType == .performance ? .performance : .practice
+            try relationshipDB.logRating(from: last.from, to: last.to, rating: rating, source: source)
+        } catch {
+            print("HyperPhraseView: Failed to rate transition: \(error)")
+        }
     }
 }
 

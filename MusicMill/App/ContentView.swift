@@ -12,41 +12,35 @@ struct ContentView: View {
                 }
                 .tag(0)
             
-            DJMixerView()
-                .tabItem {
-                    Label("DJ Mixer", systemImage: "slider.horizontal.3")
-                }
-                .tag(1)
-            
             PreparationView()
                 .tabItem {
                     Label("Prep", systemImage: "pencil.and.list.clipboard")
                 }
-                .tag(2)
+                .tag(1)
             
             PhrasePerformanceView()
                 .tabItem {
                     Label("Phrase", systemImage: "music.note.list")
                 }
-                .tag(3)
+                .tag(2)
             
             GranularPerformanceView()
                 .tabItem {
                     Label("Granular", systemImage: "waveform.path")
                 }
-                .tag(4)
+                .tag(3)
             
             RAVEView()
                 .tabItem {
                     Label("RAVE", systemImage: "waveform")
                 }
-                .tag(5)
+                .tag(4)
             
             TrainingView()
                 .tabItem {
                     Label("Training", systemImage: "brain")
                 }
-                .tag(6)
+                .tag(5)
         }
         .frame(minWidth: 1000, minHeight: 700)
     }
