@@ -16,6 +16,7 @@ class HyperPhrasePlayer: ObservableObject {
         var playbackPosition: Int = 0       // Sample position in current phrase
         var isTransitioning: Bool = false
         var transitionProgress: Float = 0.0
+        var pendingCut: Bool = false        // User requested beat-aligned cut
     }
     
     struct Settings {
@@ -240,42 +241,15 @@ class HyperPhrasePlayer: ObservableObject {
         audioEngine.stop()
     }
     
-    /// Trigger transition to next phrase now
+    /// Trigger transition to next phrase now (beat-aligned direct cut)
     func triggerTransition() {
         stateLock.lock()
         defer { stateLock.unlock() }
         
         guard state.nextPhrase != nil, nextBuffer != nil else { return }
         
-        state.isTransitioning = true
-        
-        // Configure transition
-        var config = TransitionEngine.TransitionConfig()
-        config.tempo = state.currentPhrase?.tempo ?? 120.0
-        config.durationBars = settings.transitionBars
-        
-        // Use suggested transition type from link if available
-        if let currentId = state.currentPhrase?.id,
-           let nextId = state.nextPhrase?.id,
-           let link = database.getLinks(for: currentId).first(where: { $0.targetId == nextId }) {
-            // Convert PhraseLink's TransitionType to TransitionEngine.TransitionType
-            switch link.suggestedTransition {
-            case .crossfade: config.type = .crossfade
-            case .eqSwap: config.type = .eqSwap
-            case .filter: config.type = .filter
-            case .cut: config.type = .cut
-            }
-        }
-        
-        transitionEngine.configure(config)
-        transitionEngine.start()
-        
-        // Prepare transition buffers
-        let bufferSize = 4096
-        transitionOutLeft = [Float](repeating: 0, count: bufferSize)
-        transitionOutRight = [Float](repeating: 0, count: bufferSize)
-        transitionInLeft = [Float](repeating: 0, count: bufferSize)
-        transitionInRight = [Float](repeating: 0, count: bufferSize)
+        // Mark that we want to cut (will happen on next beat)
+        state.pendingCut = true
     }
     
     // MARK: - Settings
@@ -322,82 +296,92 @@ class HyperPhrasePlayer: ObservableObject {
         let bufferLength = Int(buffer.frameLength)
         let channelCount = Int(buffer.format.channelCount)
         
-        if state.isTransitioning, let nextBuf = nextBuffer, let nextChannelData = nextBuf.floatChannelData {
-            // Transitioning between phrases
-            renderTransition(
-                frameCount: Int(frameCount),
-                currentBuffer: channelData,
-                currentLength: bufferLength,
-                currentChannels: channelCount,
-                nextBuffer: nextChannelData,
-                nextLength: Int(nextBuf.frameLength),
-                nextChannels: Int(nextBuf.format.channelCount),
-                leftOut: leftOut,
-                rightOut: rightOut
-            )
-        } else {
-            // Normal playback
-            for i in 0..<Int(frameCount) {
-                if state.playbackPosition < bufferLength {
-                    let leftSample: Float
-                    let rightSample: Float
-                    
-                    if channelCount >= 2 {
-                        leftSample = channelData[0][state.playbackPosition]
-                        rightSample = channelData[1][state.playbackPosition]
-                    } else {
-                        leftSample = channelData[0][state.playbackPosition]
-                        rightSample = leftSample
-                    }
-                    
-                    leftOut?[i] = leftSample * settings.masterVolume
-                    rightOut?[i] = rightSample * settings.masterVolume
-                    state.playbackPosition += 1
+        // Check for pending beat-aligned cut
+        if state.pendingCut, nextBuffer != nil {
+            let currentTime = Double(state.playbackPosition) / sampleRate
+            if isNearBeat(currentTime, beats: state.currentPhrase?.beats ?? []) {
+                // Execute instant cut on beat
+                executeDirectCut()
+                state.pendingCut = false
+            }
+        }
+        
+        // Re-check buffer after potential cut
+        guard let activeBuffer = currentBuffer,
+              let activeChannelData = activeBuffer.floatChannelData else {
+            fillSilence(audioBufferList: audioBufferList, frameCount: frameCount)
+            return noErr
+        }
+        let activeLength = Int(activeBuffer.frameLength)
+        let activeChannelCount = Int(activeBuffer.format.channelCount)
+        
+        // Normal playback (no complex transitions for now)
+        for i in 0..<Int(frameCount) {
+            if state.playbackPosition < activeLength {
+                let leftSample: Float
+                let rightSample: Float
+                
+                if activeChannelCount >= 2 {
+                    leftSample = activeChannelData[0][state.playbackPosition]
+                    rightSample = activeChannelData[1][state.playbackPosition]
                 } else {
-                    // End of current phrase
-                    if settings.autoAdvance && state.nextPhrase != nil && nextBuffer != nil {
-                        // Check if this is a sequential same-track transition
-                        let isSequential = isSequentialTransition()
-                        
-                        if isSequential {
-                            // Seamless gapless transition - just swap and continue
-                            completeGaplessTransition()
-                            // Continue playing from the new buffer at position 0
-                            if let newChannelData = currentBuffer?.floatChannelData,
-                               Int(currentBuffer?.frameLength ?? 0) > 0 {
-                                let newChannelCount = Int(currentBuffer?.format.channelCount ?? 1)
-                                if newChannelCount >= 2 {
-                                    leftOut?[i] = newChannelData[0][0] * settings.masterVolume
-                                    rightOut?[i] = newChannelData[1][0] * settings.masterVolume
-                                } else {
-                                    let sample = newChannelData[0][0] * settings.masterVolume
-                                    leftOut?[i] = sample
-                                    rightOut?[i] = sample
-                                }
-                                state.playbackPosition = 1
+                    leftSample = activeChannelData[0][state.playbackPosition]
+                    rightSample = leftSample
+                }
+                
+                leftOut?[i] = leftSample * settings.masterVolume
+                rightOut?[i] = rightSample * settings.masterVolume
+                state.playbackPosition += 1
+            } else {
+                // End of current phrase
+                if settings.autoAdvance && state.nextPhrase != nil && nextBuffer != nil {
+                    // Check if this is a sequential same-track transition
+                    let isSequential = isSequentialTransition()
+                    
+                    if isSequential {
+                        // Seamless gapless transition - just swap and continue
+                        completeGaplessTransition()
+                        // Continue playing from the new buffer at position 0
+                        if let newChannelData = currentBuffer?.floatChannelData,
+                           Int(currentBuffer?.frameLength ?? 0) > 0 {
+                            let newChannelCount = Int(currentBuffer?.format.channelCount ?? 1)
+                            if newChannelCount >= 2 {
+                                leftOut?[i] = newChannelData[0][0] * settings.masterVolume
+                                rightOut?[i] = newChannelData[1][0] * settings.masterVolume
                             } else {
-                                leftOut?[i] = 0
-                                rightOut?[i] = 0
+                                let sample = newChannelData[0][0] * settings.masterVolume
+                                leftOut?[i] = sample
+                                rightOut?[i] = sample
                             }
+                            state.playbackPosition = 1
                         } else {
-                            // Cross-track or non-sequential: apply transition effect
-                            state.isTransitioning = true
-                            var config = TransitionEngine.TransitionConfig()
-                            config.tempo = state.currentPhrase?.tempo ?? 120.0
-                            config.durationBars = settings.transitionBars
-                            transitionEngine.configure(config)
-                            transitionEngine.start()
                             leftOut?[i] = 0
                             rightOut?[i] = 0
                         }
                     } else {
-                        // Loop current phrase
-                        state.playbackPosition = 0
+                        // Cross-track or non-sequential at end of phrase: direct cut
+                        executeDirectCut()
+                        // Play first sample of new buffer
+                        if let newChannelData = currentBuffer?.floatChannelData,
+                           Int(currentBuffer?.frameLength ?? 0) > 0 {
+                            let newChannelCount = Int(currentBuffer?.format.channelCount ?? 1)
+                            if newChannelCount >= 2 {
+                                leftOut?[i] = newChannelData[0][0] * settings.masterVolume
+                                rightOut?[i] = newChannelData[1][0] * settings.masterVolume
+                            } else {
+                                let sample = newChannelData[0][0] * settings.masterVolume
+                                leftOut?[i] = sample
+                                rightOut?[i] = sample
+                            }
+                            state.playbackPosition = 1
+                        } else {
+                            leftOut?[i] = 0
+                            rightOut?[i] = 0
+                        }
                     }
-                    
-                    if !state.isTransitioning {
-                        // Only output silence if we didn't handle it above
-                    }
+                } else {
+                    // Loop current phrase
+                    state.playbackPosition = 0
                 }
             }
         }
@@ -578,6 +562,76 @@ class HyperPhrasePlayer: ObservableObject {
     }
     
     // MARK: - Helpers
+    
+    /// Check if current playback position is near a beat
+    private func isNearBeat(_ currentTime: TimeInterval, beats: [TimeInterval]) -> Bool {
+        let tolerance: TimeInterval = 0.05  // 50ms tolerance
+        
+        // If no beat data, cut immediately
+        if beats.isEmpty {
+            return true
+        }
+        
+        // Find nearest beat
+        for beat in beats {
+            if abs(currentTime - beat) <= tolerance {
+                return true
+            }
+        }
+        
+        // Also cut if we're very close to end of phrase (within 100ms)
+        if let phrase = state.currentPhrase {
+            let remaining = phrase.duration - currentTime
+            if remaining < 0.1 {
+                return true
+            }
+        }
+        
+        return false
+    }
+    
+    /// Execute a direct cut to the next phrase (no fade/transition)
+    private func executeDirectCut() {
+        // Swap buffers
+        currentBuffer = nextBuffer
+        nextBuffer = nil
+        state.playbackPosition = 0
+        
+        // Update state
+        if let next = state.nextPhrase {
+            state.currentPhrase = next
+            
+            // Select new next phrase
+            let links = database.getLinks(for: next.id)
+            let alternatives = database.getAlternatives(for: next.id, limit: 8)
+            
+            // Prefer same track sequence for auto-queue
+            let newNext: PhraseNode?
+            if let seqNext = database.getNextInSequence(for: next.id) {
+                newNext = seqNext
+            } else {
+                newNext = links.first.flatMap { database.getPhrase(id: $0.targetId) }
+            }
+            
+            state.nextPhrase = newNext
+            
+            if let newNextPhrase = newNext {
+                loadBuffer(for: newNextPhrase) { [weak self] buffer in
+                    self?.stateLock.lock()
+                    self?.nextBuffer = buffer
+                    self?.stateLock.unlock()
+                }
+            }
+            
+            // Update published properties
+            DispatchQueue.main.async {
+                self.currentPhrase = next
+                self.nextPhrase = newNext
+                self.availableLinks = links
+                self.alternativePhrases = alternatives
+            }
+        }
+    }
     
     /// Check if the transition from current to next phrase is sequential (same track, next segment)
     private func isSequentialTransition() -> Bool {
