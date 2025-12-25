@@ -137,12 +137,14 @@ def extract_waveform_rgb(audio_path: str, num_points: int = 150) -> Optional[Dic
         mid_resampled = np.zeros(num_points)
         high_resampled = np.zeros(num_points)
     
-    # Normalize to 0-1 (using global max across all bands)
-    max_val = max(low_resampled.max(), mid_resampled.max(), high_resampled.max())
-    if max_val > 0:
-        low_resampled = low_resampled / max_val
-        mid_resampled = mid_resampled / max_val
-        high_resampled = high_resampled / max_val
+    # Normalize each band INDEPENDENTLY to 0-1 for proper RGB visualization
+    # (Bass naturally has more energy than highs - each needs its own scale)
+    if low_resampled.max() > 0:
+        low_resampled = low_resampled / low_resampled.max()
+    if mid_resampled.max() > 0:
+        mid_resampled = mid_resampled / mid_resampled.max()
+    if high_resampled.max() > 0:
+        high_resampled = high_resampled / high_resampled.max()
     
     return {
         "low": [round(float(v), 4) for v in low_resampled],
