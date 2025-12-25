@@ -257,6 +257,7 @@
 				35AACBA22EF704C7003DAD74 /* StyleController.swift */,
 				35AACBA32EF704C7003DAD74 /* TrackSelector.swift */,
 							90CE387D266B165E2B7F55D7 /* GenerationController.swift */,
+				WAVEFORM001FREF00000000001 /* WaveformView.swift */,
 );
 			path = Performance;
 			sourceTree = "<group>";
@@ -292,7 +293,6 @@
 			isa = PBXGroup;
 			children = (
 				RAVEVIEW001FREF00000000001 /* RAVEView.swift */,
-				WAVEFORM001FREF00000000001 /* WaveformView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
