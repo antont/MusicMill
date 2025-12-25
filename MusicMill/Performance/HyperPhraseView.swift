@@ -60,6 +60,18 @@ struct HyperPhraseView: View {
             loadGraph()
             setupAudio()
         }
+        .onChange(of: player.currentPhrase?.id) { _, newId in
+            // Sync Deck A with player's current phrase
+            syncDeckAWithPlayer()
+        }
+        .onChange(of: player.isPlaying) { _, isPlaying in
+            // Sync deck A playback state
+            if isPlaying && deckA.currentPhrase != nil && !deckA.isPlaying {
+                deckA.play()
+            } else if !isPlaying && deckA.isPlaying {
+                deckA.pause()
+            }
+        }
     }
     
     // MARK: - Audio Setup
@@ -67,8 +79,28 @@ struct HyperPhraseView: View {
     private func setupAudio() {
         do {
             try audioRouter.startMainEngine()
+            try audioRouter.startCueEngine()
         } catch {
             print("HyperPhraseView: Failed to start audio: \(error)")
+        }
+    }
+    
+    /// Keep Deck A in sync with the player's current phrase
+    private func syncDeckAWithPlayer() {
+        guard let phrase = player.currentPhrase else { return }
+        
+        // Only load if different phrase
+        if deckA.currentPhrase?.id != phrase.id {
+            Task {
+                do {
+                    try await deckA.load(phrase)
+                    if player.isPlaying {
+                        deckA.play()
+                    }
+                } catch {
+                    print("HyperPhraseView: Failed to sync Deck A: \(error)")
+                }
+            }
         }
     }
     
@@ -225,7 +257,7 @@ struct HyperPhraseView: View {
     }
     
     private var mixerCenterControls: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             // CUE toggle
             Toggle(isOn: $cueEnabled) {
                 Text("CUE")
@@ -236,14 +268,33 @@ struct HyperPhraseView: View {
             .tint(.cyan)
             .controlSize(.small)
             
-            // GO button - execute transition
+            // Queued indicator
+            if let queued = player.nextPhrase {
+                VStack(spacing: 2) {
+                    Text("QUEUED")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.green)
+                    Text(queued.segmentType)
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+            
+            // GO button - queue for phrase boundary
             Button(action: { executeTransition() }) {
-                Text("GO")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 50, height: 30)
+                VStack(spacing: 2) {
+                    Text("GO")
+                        .font(.system(size: 14, weight: .bold))
+                    if deckB.currentPhrase != nil && player.nextPhrase?.id != deckB.currentPhrase?.id {
+                        Text("queue")
+                            .font(.system(size: 8))
+                    }
+                }
+                .frame(width: 55, height: 35)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(player.nextPhrase?.id == deckB.currentPhrase?.id ? .gray : .green)
             .disabled(deckB.currentPhrase == nil)
             
             // Quick rating
@@ -270,7 +321,7 @@ struct HyperPhraseView: View {
         .background(Color(white: 0.05))
     }
     
-    /// Execute transition: move deck B to main, log event
+    /// Execute transition: queue deck B for phrase boundary switch
     private func executeTransition() {
         guard let phraseB = deckB.currentPhrase else { return }
         
@@ -279,18 +330,15 @@ struct HyperPhraseView: View {
             logTransition(from: phraseA, to: phraseB)
         }
         
-        // Load phrase B into the player (which controls deck A)
+        // Queue phrase B - will switch at phrase boundary
         player.queueNext(phraseB)
-        player.triggerTransition()
         
-        // Also update deck A to show the new phrase
-        Task {
-            try? await deckA.load(phraseB)
-            deckA.play()
-        }
+        // Visual feedback: the branch card will show as "queued"
+        // Actual switch happens when current phrase ends
+        // Deck A will sync automatically via onChange handler
         
-        // Clear deck B
-        deckB.unload()
+        // Stop cue playback
+        deckB.pause()
     }
     
     // MARK: - Control Panel
@@ -978,6 +1026,8 @@ struct HyperPhraseView: View {
                 try player.loadGraph()
                 DispatchQueue.main.async {
                     isLoading = false
+                    // Sync Deck A with initial phrase
+                    syncDeckAWithPlayer()
                 }
             } catch {
                 DispatchQueue.main.async {
