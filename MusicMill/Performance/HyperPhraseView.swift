@@ -168,9 +168,13 @@ struct HyperPhraseView: View {
             .background(Color(white: 0.1))
             
             // Scrolling waveform with centered playhead
+            // Shows: current phrase → next in sequence (continuation)
+            // If branch loaded: splits to show continuation vs branch alternative
             ScrollingWaveformView(
                 phrase: player.currentPhrase,
                 playbackProgress: player.playbackProgress,
+                nextPhrase: player.getNextInSequence(),
+                branchPhrase: deckB.currentPhrase,
                 color: .orange
             )
         }

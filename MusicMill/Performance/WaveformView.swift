@@ -102,9 +102,12 @@ struct CompactWaveformView: View {
 
 /// Scrolling waveform with centered playhead (like Rekordbox/Serato)
 /// The waveform scrolls past a fixed playhead in the center
+/// Can show current phrase + next phrase continuation, and optionally a branch alternative
 struct ScrollingWaveformView: View {
     let phrase: PhraseNode?
     let playbackProgress: Double  // 0-1
+    var nextPhrase: PhraseNode? = nil  // Next phrase in sequence (continuation)
+    var branchPhrase: PhraseNode? = nil  // Alternative branch option
     var color: Color = .orange
     
     // Colors matching DJ software aesthetics
@@ -116,7 +119,10 @@ struct ScrollingWaveformView: View {
         GeometryReader { geo in
             if let phrase = phrase, let waveform = phrase.waveform {
                 Canvas { context, size in
-                    renderScrollingWaveform(context: context, size: size, waveform: waveform)
+                    renderScrollingWaveform(context: context, size: size, 
+                                           currentWaveform: waveform,
+                                           nextWaveform: nextPhrase?.waveform,
+                                           branchWaveform: branchPhrase?.waveform)
                 }
             } else {
                 Rectangle()
@@ -131,56 +137,94 @@ struct ScrollingWaveformView: View {
         .background(Color.black)
     }
     
-    private func renderScrollingWaveform(context: GraphicsContext, size: CGSize, waveform: WaveformData) {
-        let pointCount = waveform.points
+    private func renderScrollingWaveform(context: GraphicsContext, size: CGSize, 
+                                         currentWaveform: WaveformData,
+                                         nextWaveform: WaveformData?,
+                                         branchWaveform: WaveformData?) {
+        let pointCount = currentWaveform.points
         guard pointCount > 0 else { return }
         
-        let centerY = size.height / 2
-        let playheadX = size.width / 2  // Playhead is always in center
-        
-        // Calculate visible range based on playback progress
-        // We want to show waveform scrolling past the center playhead
-        let visiblePoints = Int(size.width / 3)  // Points visible on screen (adjust density)
+        let hasBranch = branchWaveform != nil
+        let playheadX = size.width / 2
         let centerPoint = Int(Double(pointCount) * playbackProgress)
+        
+        // Calculate where the current phrase ends in screen coordinates
+        let remainingCurrentPoints = pointCount - centerPoint
+        let currentEndScreenX = playheadX + CGFloat(remainingCurrentPoints * 3)
+        
+        // If we have a branch, split the view: top half = continuation, bottom half = branch
+        // Otherwise, use full height for the waveform
+        let mainCenterY: CGFloat
+        let branchCenterY: CGFloat
+        let waveformHeight: CGFloat
+        
+        if hasBranch {
+            // Split view
+            waveformHeight = size.height * 0.45
+            mainCenterY = size.height * 0.25
+            branchCenterY = size.height * 0.75
+            
+            // Draw separator line where split begins
+            if currentEndScreenX < size.width {
+                var splitPath = Path()
+                splitPath.move(to: CGPoint(x: currentEndScreenX, y: size.height * 0.5))
+                splitPath.addLine(to: CGPoint(x: size.width, y: size.height * 0.5))
+                context.stroke(splitPath, with: .color(.white.opacity(0.3)), lineWidth: 1)
+            }
+        } else {
+            waveformHeight = size.height * 0.9
+            mainCenterY = size.height / 2
+            branchCenterY = 0  // Not used
+        }
         
         // Draw each visible point
         for screenX in stride(from: 0, to: Int(size.width), by: 3) {
             let pointOffset = screenX - Int(playheadX)
             let dataIndex = centerPoint + (pointOffset / 3)
-            
-            guard dataIndex >= 0 && dataIndex < pointCount else { continue }
-            
             let x = CGFloat(screenX)
             let isPast = x < playheadX
-            let alpha: Double = isPast ? 0.4 : 1.0
             
-            // Get amplitudes
-            let bassAmp = CGFloat(min(max(waveform.low[safe: dataIndex] ?? 0, 0), 1))
-            let midAmp = CGFloat(min(max(waveform.mid[safe: dataIndex] ?? 0, 0), 1))
-            let highAmp = CGFloat(min(max(waveform.high[safe: dataIndex] ?? 0, 0), 1))
+            // Determine which waveform to use and the alpha
+            let isInCurrentPhrase = dataIndex >= 0 && dataIndex < pointCount
+            let isInNextPhrase = !isInCurrentPhrase && dataIndex >= pointCount
+            let nextIndex = dataIndex - pointCount
             
-            // Scale heights
-            let maxHeight = size.height * 0.9
-            let bassH = bassAmp * maxHeight * 0.45
-            let midH = midAmp * maxHeight * 0.35
-            let highH = highAmp * maxHeight * 0.20
+            // Main waveform (current + next continuation)
+            if isInCurrentPhrase {
+                let alpha: Double = isPast ? 0.4 : 1.0
+                drawWaveformBar(context: context, waveform: currentWaveform, index: dataIndex,
+                               x: x, centerY: mainCenterY, maxHeight: waveformHeight, alpha: alpha)
+            } else if isInNextPhrase, let next = nextWaveform, nextIndex < next.points {
+                // Draw next phrase continuation
+                drawWaveformBar(context: context, waveform: next, index: nextIndex,
+                               x: x, centerY: mainCenterY, maxHeight: waveformHeight, alpha: 0.7)
+            }
             
-            // Draw mirrored waveform
-            // Top half
-            drawBar(context: context, x: x, y: centerY - (bassH + midH + highH) / 2,
-                   width: 2.5, height: highH / 2, color: highColor.opacity(alpha))
-            drawBar(context: context, x: x, y: centerY - (bassH + midH) / 2,
-                   width: 2.5, height: midH / 2, color: midColor.opacity(alpha))
-            drawBar(context: context, x: x, y: centerY - bassH / 2,
-                   width: 2.5, height: bassH / 2, color: bassColor.opacity(alpha))
+            // Branch waveform (only shown after current phrase ends)
+            if hasBranch, let branch = branchWaveform, isInNextPhrase, nextIndex < branch.points {
+                drawWaveformBar(context: context, waveform: branch, index: nextIndex,
+                               x: x, centerY: branchCenterY, maxHeight: waveformHeight, alpha: 0.9,
+                               tint: .cyan)
+            }
+        }
+        
+        // Draw branch label if we have one
+        if hasBranch, currentEndScreenX < size.width {
+            // Continuation label (top)
+            let continueText = context.resolve(Text("→ CONTINUE").font(.system(size: 8, weight: .bold)).foregroundColor(.orange.opacity(0.8)))
+            context.draw(continueText, at: CGPoint(x: currentEndScreenX + 40, y: mainCenterY - waveformHeight/2 - 6))
             
-            // Bottom half
-            drawBar(context: context, x: x, y: centerY,
-                   width: 2.5, height: bassH / 2, color: bassColor.opacity(alpha))
-            drawBar(context: context, x: x, y: centerY + bassH / 2,
-                   width: 2.5, height: midH / 2, color: midColor.opacity(alpha))
-            drawBar(context: context, x: x, y: centerY + bassH / 2 + midH / 2,
-                   width: 2.5, height: highH / 2, color: highColor.opacity(alpha))
+            // Branch label (bottom)
+            let branchText = context.resolve(Text("↳ BRANCH").font(.system(size: 8, weight: .bold)).foregroundColor(.cyan.opacity(0.8)))
+            context.draw(branchText, at: CGPoint(x: currentEndScreenX + 40, y: branchCenterY - waveformHeight/2 - 6))
+        }
+        
+        // Draw phrase boundary marker
+        if currentEndScreenX > playheadX && currentEndScreenX < size.width {
+            var boundaryPath = Path()
+            boundaryPath.move(to: CGPoint(x: currentEndScreenX, y: 0))
+            boundaryPath.addLine(to: CGPoint(x: currentEndScreenX, y: size.height))
+            context.stroke(boundaryPath, with: .color(.white.opacity(0.5)), style: StrokeStyle(lineWidth: 1, dash: [4, 2]))
         }
         
         // Draw centered playhead
@@ -196,6 +240,42 @@ struct ScrollingWaveformView: View {
         trianglePath.addLine(to: CGPoint(x: playheadX, y: 8))
         trianglePath.closeSubpath()
         context.fill(trianglePath, with: .color(color))
+    }
+    
+    private func drawWaveformBar(context: GraphicsContext, waveform: WaveformData, index: Int,
+                                 x: CGFloat, centerY: CGFloat, maxHeight: CGFloat, alpha: Double,
+                                 tint: Color? = nil) {
+        // Get amplitudes
+        let bassAmp = CGFloat(min(max(waveform.low[safe: index] ?? 0, 0), 1))
+        let midAmp = CGFloat(min(max(waveform.mid[safe: index] ?? 0, 0), 1))
+        let highAmp = CGFloat(min(max(waveform.high[safe: index] ?? 0, 0), 1))
+        
+        // Scale heights
+        let bassH = bassAmp * maxHeight * 0.45
+        let midH = midAmp * maxHeight * 0.35
+        let highH = highAmp * maxHeight * 0.20
+        
+        // Colors (optionally tinted)
+        let bass = tint ?? bassColor
+        let mid = tint?.opacity(0.8) ?? midColor
+        let high = tint?.opacity(0.6) ?? highColor
+        
+        // Draw mirrored waveform
+        // Top half
+        drawBar(context: context, x: x, y: centerY - (bassH + midH + highH) / 2,
+               width: 2.5, height: highH / 2, color: high.opacity(alpha))
+        drawBar(context: context, x: x, y: centerY - (bassH + midH) / 2,
+               width: 2.5, height: midH / 2, color: mid.opacity(alpha))
+        drawBar(context: context, x: x, y: centerY - bassH / 2,
+               width: 2.5, height: bassH / 2, color: bass.opacity(alpha))
+        
+        // Bottom half
+        drawBar(context: context, x: x, y: centerY,
+               width: 2.5, height: bassH / 2, color: bass.opacity(alpha))
+        drawBar(context: context, x: x, y: centerY + bassH / 2,
+               width: 2.5, height: midH / 2, color: mid.opacity(alpha))
+        drawBar(context: context, x: x, y: centerY + bassH / 2 + midH / 2,
+               width: 2.5, height: highH / 2, color: high.opacity(alpha))
     }
     
     private func drawBar(context: GraphicsContext, x: CGFloat, y: CGFloat,
