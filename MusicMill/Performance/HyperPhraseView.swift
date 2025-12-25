@@ -613,11 +613,17 @@ struct CompactPhraseCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            // Track name (truncated)
-            Text(phrase.sourceTrackName)
-                .font(.caption2)
-                .lineLimit(1)
-                .foregroundColor(.primary)
+            // Top row: Sequence number + Track name
+            HStack(spacing: 4) {
+                Text("#\(phrase.sequenceNumber)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(.secondary)
+                
+                Text(phrase.sourceTrackName)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .foregroundColor(.primary)
+            }
             
             HStack(spacing: 4) {
                 // Segment type
