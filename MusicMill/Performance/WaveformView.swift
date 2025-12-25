@@ -215,11 +215,15 @@ struct ScrollingWaveformView: View {
             if isInCurrent {
                 let idx = Int(dataPoint)
                 if idx >= 0 && idx < pointCount {
-                    addWaveformBars(to: isPast ? &bassPathPast : &bassPath,
-                                   midPath: isPast ? &midPathPast : &midPath,
-                                   highPath: isPast ? &highPathPast : &highPath,
-                                   waveform: currentWaveform, index: idx,
-                                   x: screenX, centerY: mainCenterY, maxHeight: waveformHeight)
+                    if isPast {
+                        addWaveformBars(to: &bassPathPast, midPath: &midPathPast, highPath: &highPathPast,
+                                       waveform: currentWaveform, index: idx,
+                                       x: screenX, centerY: mainCenterY, maxHeight: waveformHeight)
+                    } else {
+                        addWaveformBars(to: &bassPath, midPath: &midPath, highPath: &highPath,
+                                       waveform: currentWaveform, index: idx,
+                                       x: screenX, centerY: mainCenterY, maxHeight: waveformHeight)
+                    }
                 }
             } else if isInNext, let next = nextWaveform, nextDataIndex >= 0 && nextDataIndex < next.points {
                 // Continue with next phrase
