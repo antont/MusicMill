@@ -212,13 +212,15 @@ class HyperPhrasePlayer: ObservableObject {
         return database.getPhrasesForTrack(current.sourceTrack)
     }
     
-    /// Get branch options for a specific phrase (alternatives from other tracks)
+    /// Get branch options for a specific phrase (alternatives from OTHER tracks only)
     func getBranchOptions(for phrase: PhraseNode, limit: Int = 5) -> [PhraseNode] {
         let links = database.getLinks(for: phrase.id)
         return links
-            .filter { !$0.isOriginalSequence }  // Exclude same-track sequence
-            .prefix(limit)
+            .filter { !$0.isOriginalSequence }  // Exclude same-track sequence links
             .compactMap { database.getPhrase(id: $0.targetId) }
+            .filter { $0.sourceTrack != phrase.sourceTrack }  // Exclude ALL phrases from same track
+            .prefix(limit)
+            .map { $0 }  // Convert ArraySlice to Array
     }
     
     // MARK: - Playback Control
