@@ -613,7 +613,7 @@ struct RAVEView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        WaveformView(samples: controller.inputWaveform, color: .blue)
+                        SimpleWaveformView(samples: controller.inputWaveform, color: .blue)
                             .frame(height: 80)
                             .background(Color.black.opacity(0.8))
                             .cornerRadius(4)
@@ -625,7 +625,7 @@ struct RAVEView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        WaveformView(samples: controller.outputWaveform, color: .green)
+                        SimpleWaveformView(samples: controller.outputWaveform, color: .green)
                             .frame(height: 80)
                             .background(Color.black.opacity(0.8))
                             .cornerRadius(4)
@@ -721,9 +721,9 @@ struct VerticalSlider: View {
     }
 }
 
-// MARK: - Waveform View
+// MARK: - Simple Waveform View (for RAVE audio display)
 
-struct WaveformView: View {
+struct SimpleWaveformView: View {
     let samples: [Float]
     let color: Color
     
