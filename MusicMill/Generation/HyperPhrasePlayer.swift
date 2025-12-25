@@ -356,20 +356,48 @@ class HyperPhrasePlayer: ObservableObject {
                 } else {
                     // End of current phrase
                     if settings.autoAdvance && state.nextPhrase != nil && nextBuffer != nil {
-                        // Auto-transition to next
-                        state.isTransitioning = true
-                        var config = TransitionEngine.TransitionConfig()
-                        config.tempo = state.currentPhrase?.tempo ?? 120.0
-                        config.durationBars = settings.transitionBars
-                        transitionEngine.configure(config)
-                        transitionEngine.start()
+                        // Check if this is a sequential same-track transition
+                        let isSequential = isSequentialTransition()
+                        
+                        if isSequential {
+                            // Seamless gapless transition - just swap and continue
+                            completeGaplessTransition()
+                            // Continue playing from the new buffer at position 0
+                            if let newChannelData = currentBuffer?.floatChannelData,
+                               Int(currentBuffer?.frameLength ?? 0) > 0 {
+                                let newChannelCount = Int(currentBuffer?.format.channelCount ?? 1)
+                                if newChannelCount >= 2 {
+                                    leftOut?[i] = newChannelData[0][0] * settings.masterVolume
+                                    rightOut?[i] = newChannelData[1][0] * settings.masterVolume
+                                } else {
+                                    let sample = newChannelData[0][0] * settings.masterVolume
+                                    leftOut?[i] = sample
+                                    rightOut?[i] = sample
+                                }
+                                state.playbackPosition = 1
+                            } else {
+                                leftOut?[i] = 0
+                                rightOut?[i] = 0
+                            }
+                        } else {
+                            // Cross-track or non-sequential: apply transition effect
+                            state.isTransitioning = true
+                            var config = TransitionEngine.TransitionConfig()
+                            config.tempo = state.currentPhrase?.tempo ?? 120.0
+                            config.durationBars = settings.transitionBars
+                            transitionEngine.configure(config)
+                            transitionEngine.start()
+                            leftOut?[i] = 0
+                            rightOut?[i] = 0
+                        }
                     } else {
                         // Loop current phrase
                         state.playbackPosition = 0
                     }
                     
-                    leftOut?[i] = 0
-                    rightOut?[i] = 0
+                    if !state.isTransitioning {
+                        // Only output silence if we didn't handle it above
+                    }
                 }
             }
         }
@@ -550,6 +578,55 @@ class HyperPhrasePlayer: ObservableObject {
     }
     
     // MARK: - Helpers
+    
+    /// Check if the transition from current to next phrase is sequential (same track, next segment)
+    private func isSequentialTransition() -> Bool {
+        guard let current = state.currentPhrase,
+              let next = state.nextPhrase else {
+            return false
+        }
+        
+        // Same track and next segment index
+        return current.sourceTrack == next.sourceTrack &&
+               next.trackIndex == current.trackIndex + 1
+    }
+    
+    /// Complete a gapless transition (same track, sequential segment)
+    private func completeGaplessTransition() {
+        // Swap buffers
+        currentBuffer = nextBuffer
+        nextBuffer = nil
+        
+        // Update state
+        if let next = state.nextPhrase {
+            state.currentPhrase = next
+            state.playbackPosition = 0  // Start from beginning
+            
+            // Select new next phrase
+            let links = database.getLinks(for: next.id)
+            let alternatives = database.getAlternatives(for: next.id, limit: 8)
+            
+            // For gapless, always prefer same track sequence
+            let newNext = database.getNextInSequence(for: next.id)
+            state.nextPhrase = newNext
+            
+            if let newNextPhrase = newNext {
+                loadBuffer(for: newNextPhrase) { [weak self] buffer in
+                    self?.stateLock.lock()
+                    self?.nextBuffer = buffer
+                    self?.stateLock.unlock()
+                }
+            }
+            
+            // Update published properties
+            DispatchQueue.main.async {
+                self.currentPhrase = next
+                self.nextPhrase = newNext
+                self.availableLinks = links
+                self.alternativePhrases = alternatives
+            }
+        }
+    }
     
     private func transitionTypeFromString(_ string: String) -> TransitionEngine.TransitionType {
         switch string {
