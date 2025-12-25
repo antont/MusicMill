@@ -48,6 +48,12 @@
 		QA01234567890123456789AB /* QualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = QA12345678901234567890AB /* QualityAnalyzer.swift */; };
 		RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEVIEW001FREF00000000001 /* RAVEView.swift */; };
 		WAVEFORM002BUILD00000000001 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORM001FREF00000000001 /* WaveformView.swift */; };
+		RELDB001BUILD00000000001 /* RelationshipDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = RELDB001FREF00000000001 /* RelationshipDatabase.swift */; };
+		AUDIOROUTER01BUILD000001 /* AudioRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUDIOROUTER01FREF000001 /* AudioRouter.swift */; };
+		DECK00001BUILD00000001 /* Deck.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECK00001FREF00000001 /* Deck.swift */; };
+		THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */ = {isa = PBXBuildFile; fileRef = THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */; };
+		PREPVIEW001BUILD000001 /* PreparationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PREPVIEW001FREF000001 /* PreparationView.swift */; };
+		DJMIXER001BUILD000001 /* DJMixerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DJMIXER001FREF000001 /* DJMixerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +120,12 @@
 		C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisEngine.swift; sourceTree = "<group>"; };
 		RAVEVIEW001FREF00000000001 /* RAVEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEView.swift; sourceTree = "<group>"; };
 		WAVEFORM001FREF00000000001 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		RELDB001FREF00000000001 /* RelationshipDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationshipDatabase.swift; sourceTree = "<group>"; };
+		AUDIOROUTER01FREF000001 /* AudioRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRouter.swift; sourceTree = "<group>"; };
+		DECK00001FREF00000001 /* Deck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Deck.swift; sourceTree = "<group>"; };
+		THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreeBandEQ.swift; sourceTree = "<group>"; };
+		PREPVIEW001FREF000001 /* PreparationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparationView.swift; sourceTree = "<group>"; };
+		DJMIXER001FREF000001 /* DJMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJMixerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -183,6 +195,9 @@
 		35AACB932EF704C7003DAD74 /* Audio */ = {
 			isa = PBXGroup;
 			children = (
+				AUDIOROUTER01FREF000001 /* AudioRouter.swift */,
+				DECK00001FREF00000001 /* Deck.swift */,
+				THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -258,6 +273,8 @@
 				35AACBA32EF704C7003DAD74 /* TrackSelector.swift */,
 							90CE387D266B165E2B7F55D7 /* GenerationController.swift */,
 				WAVEFORM001FREF00000000001 /* WaveformView.swift */,
+				PREPVIEW001FREF000001 /* PreparationView.swift */,
+				DJMIXER001FREF000001 /* DJMixerView.swift */,
 );
 			path = Performance;
 			sourceTree = "<group>";
@@ -297,12 +314,21 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		DATA001GRP000000000001 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				RELDB001FREF00000000001 /* RelationshipDatabase.swift */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
 		35AACBA92EF704C7003DAD74 /* MusicMill */ = {
 			isa = PBXGroup;
 			children = (
 				35AACB8E2EF704C7003DAD74 /* Analysis */,
 				35AACB912EF704C7003DAD74 /* App */,
 				35AACB932EF704C7003DAD74 /* Audio */,
+				DATA001GRP000000000001 /* Data */,
 				35AACB9A2EF704C7003DAD74 /* DerivedData */,
 				35AACB9E2EF704C7003DAD74 /* ML */,
 				35AACBA42EF704C7003DAD74 /* Performance */,
@@ -529,6 +555,12 @@
 				E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */,
 				D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */,
 				8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */,
+				RELDB001BUILD00000000001 /* RelationshipDatabase.swift in Sources */,
+				AUDIOROUTER01BUILD000001 /* AudioRouter.swift in Sources */,
+				DECK00001BUILD00000001 /* Deck.swift in Sources */,
+				THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */,
+				PREPVIEW001BUILD000001 /* PreparationView.swift in Sources */,
+				DJMIXER001BUILD000001 /* DJMixerView.swift in Sources */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

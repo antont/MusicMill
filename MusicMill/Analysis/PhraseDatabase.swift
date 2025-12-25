@@ -391,6 +391,120 @@ class PhraseDatabase {
         getAllTracks().count
     }
     
+    // MARK: - User Feedback Integration
+    
+    /// Get links with weights adjusted by user feedback from RelationshipDatabase
+    func getAdjustedLinks(for phraseId: String, using relationshipDB: RelationshipDatabase) -> [(link: PhraseLink, adjustedWeight: Double)] {
+        guard let phrase = nodeIndex[phraseId] else { return [] }
+        
+        return phrase.links.map { link in
+            let adjustedWeight: Double
+            
+            do {
+                adjustedWeight = try relationshipDB.adjustedWeight(
+                    baseWeight: link.weight,
+                    from: phraseId,
+                    to: link.targetId
+                )
+            } catch {
+                adjustedWeight = link.weight
+            }
+            
+            return (link: link, adjustedWeight: adjustedWeight)
+        }.sorted { $0.adjustedWeight > $1.adjustedWeight }
+    }
+    
+    /// Get alternatives with user feedback applied, sorted by adjusted weight
+    func getAdjustedAlternatives(for phraseId: String, using relationshipDB: RelationshipDatabase, limit: Int = 10) -> [(phrase: PhraseNode, link: PhraseLink, adjustedWeight: Double, feedback: RelationshipDatabase.TransitionFeedback?)] {
+        guard let phrase = nodeIndex[phraseId] else { return [] }
+        
+        let results: [(phrase: PhraseNode, link: PhraseLink, adjustedWeight: Double, feedback: RelationshipDatabase.TransitionFeedback?)] = phrase.links
+            .filter { !$0.isOriginalSequence }
+            .compactMap { link in
+                guard let targetPhrase = nodeIndex[link.targetId] else { return nil }
+                
+                // Filter out same-track phrases
+                guard targetPhrase.sourceTrack != phrase.sourceTrack else { return nil }
+                
+                var adjustedWeight = link.weight
+                var feedback: RelationshipDatabase.TransitionFeedback? = nil
+                
+                do {
+                    feedback = try relationshipDB.getFeedback(from: phraseId, to: link.targetId)
+                    adjustedWeight = try relationshipDB.adjustedWeight(
+                        baseWeight: link.weight,
+                        from: phraseId,
+                        to: link.targetId
+                    )
+                } catch {
+                    // Use original weight if feedback unavailable
+                }
+                
+                return (phrase: targetPhrase, link: link, adjustedWeight: adjustedWeight, feedback: feedback)
+            }
+        
+        return results
+            .sorted { $0.adjustedWeight > $1.adjustedWeight }
+            .prefix(limit)
+            .map { $0 }
+    }
+    
+    /// Get top-rated transitions (based on user feedback, not algorithmic score)
+    func getTopRatedTransitions(for phraseId: String, using relationshipDB: RelationshipDatabase, minRating: Double = 0.5) -> [(phrase: PhraseNode, feedback: RelationshipDatabase.TransitionFeedback)] {
+        guard let phrase = nodeIndex[phraseId] else { return [] }
+        
+        var results: [(phrase: PhraseNode, feedback: RelationshipDatabase.TransitionFeedback)] = []
+        
+        for link in phrase.links where !link.isOriginalSequence {
+            guard let targetPhrase = nodeIndex[link.targetId],
+                  targetPhrase.sourceTrack != phrase.sourceTrack else {
+                continue
+            }
+            
+            do {
+                let feedback = try relationshipDB.getFeedback(from: phraseId, to: link.targetId)
+                
+                // Only include if has significant positive feedback
+                if feedback.totalCount > 0 && feedback.averageRating >= minRating {
+                    results.append((phrase: targetPhrase, feedback: feedback))
+                }
+            } catch {
+                continue
+            }
+        }
+        
+        return results.sorted { $0.feedback.averageRating > $1.feedback.averageRating }
+    }
+    
+    /// Get recently used transitions
+    func getRecentTransitions(for phraseId: String, using relationshipDB: RelationshipDatabase, limit: Int = 5) -> [(phrase: PhraseNode, feedback: RelationshipDatabase.TransitionFeedback)] {
+        guard let phrase = nodeIndex[phraseId] else { return [] }
+        
+        var results: [(phrase: PhraseNode, feedback: RelationshipDatabase.TransitionFeedback, lastUsed: Date?)] = []
+        
+        for link in phrase.links where !link.isOriginalSequence {
+            guard let targetPhrase = nodeIndex[link.targetId],
+                  targetPhrase.sourceTrack != phrase.sourceTrack else {
+                continue
+            }
+            
+            do {
+                let feedback = try relationshipDB.getFeedback(from: phraseId, to: link.targetId)
+                
+                if feedback.lastUsed != nil {
+                    results.append((phrase: targetPhrase, feedback: feedback, lastUsed: feedback.lastUsed))
+                }
+            } catch {
+                continue
+            }
+        }
+        
+        return results
+            .sorted { ($0.lastUsed ?? .distantPast) > ($1.lastUsed ?? .distantPast) }
+            .prefix(limit)
+            .map { ($0.phrase, $0.feedback) }
+    }
+    
     // MARK: - Errors
     
     enum PhraseDBError: LocalizedError {
