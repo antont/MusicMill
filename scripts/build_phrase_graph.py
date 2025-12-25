@@ -405,7 +405,8 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
         
         print(f"  Processing {track_name}: {len(segments)} segments")
         
-        for idx, segment in enumerate(segments):
+        valid_phrase_index = 0  # Counter for valid phrases in this track
+        for orig_idx, segment in enumerate(segments):
             start = segment.get("start", 0)
             end = segment.get("end", 0)
             duration = end - start
@@ -417,9 +418,9 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
             # Generate unique ID
             phrase_id = str(uuid.uuid4())
             
-            # Create audio filename
+            # Create audio filename (use original index to match existing files if re-running)
             safe_name = "".join(c if c.isalnum() else "_" for c in track_name)[:30]
-            audio_filename = f"{safe_name}_seg{idx}.wav"
+            audio_filename = f"{safe_name}_seg{orig_idx}.wav"
             audio_path = output_dir / audio_filename
             
             # Extract segment beats (relative to segment start)
@@ -430,7 +431,7 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
                 id=phrase_id,
                 sourceTrack=track_path,
                 sourceTrackName=track_name,
-                trackIndex=idx,
+                trackIndex=valid_phrase_index,  # Use sequential index for valid phrases
                 audioFile=str(audio_path),
                 tempo=tempo,
                 key=key,
@@ -446,6 +447,7 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
             )
             
             phrases.append(phrase)
+            valid_phrase_index += 1  # Increment for next valid phrase
     
     print(f"Extracted {len(phrases)} phrases")
     return phrases
