@@ -1,64 +1,81 @@
 # MusicMill
 
-DJ-oriented Music Machine Learning (ML) system for macOS.
+HyperMusic: Navigate your music collection as a graph of interconnected phrases. DJ-oriented music navigation and performance system for macOS.
 
 <img width="1201" height="839" alt="image" src="https://github.com/user-attachments/assets/6b628737-5aa7-495e-a52e-b9593d6fdc73" />
 
 ## Overview
 
-**Primary Goal**: MusicMill is a generative music instrument that synthesizes new audio in real-time based on your DJ collection. The system learns from your collection's styles and variations, then provides intuitive controls (style, tempo, energy) that allow you to direct the generative output in real-time - similar to how you'd normally switch folders/songs and mix tracks, but creating new music instead of just playing existing tracks.
+**Primary Focus**: MusicMill's **HyperMusic** system transforms your music collection into a navigable graph of interconnected musical phrases. Instead of playing songs linearly, you can branch between compatible phrases from different tracks, enabling seamless DJ-style transitions across your entire collection.
 
-**Stepping Stone**: Track selection/recommendations serve as a debug helper feature - showing example tracks or segments that match the current desired audio output. This helps verify the model understands your collection correctly.
+**Core Concept**: Music is analyzed and broken into structural phrases (intro, verse, chorus, drop, outro). Each phrase is connected to compatible phrases from other tracks based on musical similarity (tempo, key, energy, spectral characteristics). Navigate the graph to create unique mixes that flow naturally between tracks.
 
-## Core Concept
+## HyperMusic System
 
-Instead of selecting from existing tracks, MusicMill generates new audio in real-time based on:
-- **Style controls**: Select the musical style/genre you want
-- **Tempo controls**: Set the desired BPM
-- **Energy controls**: Adjust intensity/dynamics
-- **Mixing controls**: Crossfade, volume, EQ for live performance
+### How It Works
 
-The generative model learns from your DJ collection using:
-- **Unsupervised learning** from raw audio data
-- **Supervised learning** from labels (folder structure, metadata)
-- **Rekordbox metadata** (cue points, play history, play counts) when available
+1. **Analysis**: Your music collection is analyzed to extract:
+   - Musical phrases/segments (detected via structure analysis)
+   - Tempo (BPM) and key information
+   - Energy levels and spectral characteristics
+   - Beat grids and downbeat positions
+   - RGB waveforms for visual feedback
+
+2. **Graph Construction**: Phrases are connected into a weighted graph where edges represent musical compatibility:
+   - **Tempo compatibility**: Same BPM, half-time, or double-time relationships
+   - **Key compatibility**: Same key, relative major/minor, or circle of fifths neighbors
+   - **Energy matching**: Similar energy levels or complementary builds/drops
+   - **Spectral similarity**: Timbral matching via spectral centroid
+
+3. **Navigation**: Play songs normally or tap any compatible phrase to branch to a different track:
+   - **Same Track Sequential**: Gapless playback within the same song
+   - **Cross-Track Transition**: Switch to compatible phrases from other tracks at phrase boundaries
+   - **Beat-aligned cuts**: (Future) Immediate transitions synchronized to beats
 
 ## Features
 
-### Working
-- **Music Collection Analysis**: Scans directories for audio files (MP3, AAC, WAV, AIFF, M4A)
-- **Segment Extraction**: Extracts 30-second training segments from tracks
-- **Persistent Storage**: Saves analysis results to `~/Documents/MusicMill/Analysis/`
-- **Basic Feature Extraction**: Energy, zero crossing rate, RMS energy
-- **Performance Interface**: UI for style/tempo/energy controls
+### HyperMusic (Current Focus)
+- **Phrase Graph Analysis**: Analyzes music collection and builds navigable phrase graph
+- **Musical Compatibility Scoring**: Links phrases based on tempo, key, energy, and spectral similarity
+- **Graph Navigation Interface**: Visual timeline with branch options to compatible phrases
+- **Dual-Deck DJ Controls**: Professional mixing interface with cue/preview deck
+- **RGB Waveform Display**: DJ-style waveform visualization (bass/mid/high frequencies)
+- **Beat Grid Visualization**: Shows beat positions and phrase boundaries
+- **Phrase Boundary Transitions**: Smooth switching between tracks at phrase boundaries
+- **Persistent Graph Storage**: Saves phrase graph to disk for fast loading
 
-### In Progress
-- **Tempo Detection**: Implementing autocorrelation-based BPM detection
-- **Key Detection**: Implementing chromagram-based key analysis
-- **Granular Synthesis**: Real-time grain-based audio generation
-- **RAVE Neural Synthesis**: Deep learning audio generation via PyTorch MPS
-
-### Planned
-- **Real-time Generative Synthesis**: Generate new audio using granular synthesis
-- **Style-guided Generation**: Control output style using classification
-- **RAVE-based Instrument**: Train RAVE on your collection for neural synthesis
+### Experimental / Future Work
+- **ML Classification**: Style/genre classification models (early experiments)
+- **Granular Synthesis**: Real-time grain-based audio generation (experimental)
+- **RAVE Neural Synthesis**: Deep learning audio generation via PyTorch MPS (research)
+- **Real-time Generative Synthesis**: Generate new audio based on style/tempo/energy controls (future)
 
 ### Known Limitations
 - DRM-protected files (Apple Music M4A) cannot be analyzed
-- Tempo/key detection currently returns null (being fixed)
-- Granular synthesizer is skeleton-only (being rewritten)
+- Beat-aligned immediate cuts not yet implemented (phrase boundary transitions work)
+- DJ-style transitions (crossfade, EQ swap, filter sweep) reserved for future implementation
 
 ## Architecture
 
-The system consists of four main components:
+The HyperMusic system consists of three main components:
 
-1. **Analysis Pipeline**: Scans music collection, extracts audio features, and processes metadata (including Rekordbox data)
-2. **Model Training**: 
-   - Classification models (MLSoundClassifier) for style understanding
-   - Generative models (to be implemented) for audio synthesis
-   - Can use both supervised (labels) and unsupervised learning
-3. **Generative Engine**: Real-time audio synthesis based on control parameters (style, tempo, energy)
-4. **Live Performance Interface**: Real-time control interface for directing generative output
+1. **Analysis Pipeline** (`scripts/analyze_library.py`, `scripts/build_phrase_graph.py`):
+   - Scans music collection for audio files (MP3, AAC, WAV, AIFF, M4A)
+   - Extracts musical phrases/segments via structure analysis
+   - Computes tempo, key, energy, spectral features, and beat grids
+   - Builds weighted phrase graph with compatibility links
+   - Generates RGB waveforms for visual display
+
+2. **Phrase Database** (`MusicMill/Analysis/PhraseDatabase.swift`):
+   - Manages phrase graph persistence (JSON format)
+   - Provides graph queries (find compatible phrases, get links, etc.)
+   - Handles graph loading and caching
+
+3. **Playback & Performance Interface** (`MusicMill/Performance/HyperPhraseView.swift`, `MusicMill/Generation/HyperPhrasePlayer.swift`):
+   - Graph-aware playback engine with phrase navigation
+   - Dual-deck DJ interface with cue/preview capabilities
+   - Real-time waveform visualization
+   - Transition engine (reserved for future DJ-style transitions)
 
 ## Requirements
 
@@ -72,115 +89,121 @@ The system consists of four main components:
 ```
 MusicMill/
 ├── MusicMill/
-│   ├── App/              # App entry point and main views
-│   ├── Analysis/         # Audio analysis and feature extraction
-│   ├── Generation/       # Synthesis engines (granular, neural)
-│   ├── ML/               # Model training (classification)
-│   ├── Performance/      # Live performance interface
-│   └── Training/         # Training UI
+│   ├── App/                    # App entry point and main views
+│   ├── Analysis/               # Audio analysis and phrase graph
+│   │   ├── PhraseDatabase.swift    # Graph data model and queries
+│   │   ├── FeatureExtractor.swift  # Tempo, key, energy, spectral features
+│   │   ├── StructureAnalyzer.swift  # Phrase/segment detection
+│   │   └── ...
+│   ├── Generation/             # Playback engines
+│   │   ├── HyperPhrasePlayer.swift  # Graph-aware phrase playback
+│   │   ├── TransitionEngine.swift   # DJ-style transitions (future)
+│   │   └── ...
+│   ├── Performance/            # Performance interface
+│   │   ├── HyperPhraseView.swift    # Main graph navigation UI
+│   │   ├── WaveformView.swift       # RGB waveform display
+│   │   ├── Deck.swift               # Dual-deck DJ controls
+│   │   └── ...
+│   ├── ML/                     # ML experiments (classification)
+│   └── Training/               # Training UI (for ML models)
 ├── scripts/
-│   ├── rave_server.py    # RAVE inference server
-│   ├── setup_rave.sh     # Python environment setup
-│   └── synth.sh          # Quick synthesis test
+│   ├── analyze_library.py      # Music collection analysis
+│   ├── build_phrase_graph.py   # Phrase graph construction
+│   ├── rave_server.py          # RAVE inference (experimental)
+│   └── ...
 ├── docs/
-│   ├── RAVE_INTEGRATION.md  # Neural synthesis documentation
-│   └── plans/            # Development plans
+│   ├── plans/hypermusic_playback.md  # HyperMusic documentation
+│   └── ...
 └── README.md
 ```
 
 ## Getting Started
 
-1. Open the project in Xcode
-2. Select your music collection directory in the Training tab
-3. Analyze your collection to extract training samples
-4. Train classification models on your collection
-5. (Future) Train generative models for synthesis
-6. Switch to the Performance tab to use the generative interface
+1. **Analyze Your Collection**: Run the analysis script to build the phrase graph:
+   ```bash
+   python3 scripts/analyze_library.py /path/to/your/music/collection
+   python3 scripts/build_phrase_graph.py
+   ```
+
+2. **Open in Xcode**: Build and run the MusicMill app
+
+3. **Load the Graph**: The app will automatically load the phrase graph from `~/Documents/MusicMill/Analysis/`
+
+4. **Navigate**: Use the HyperPhraseView to navigate through your collection as a graph
 
 ## Usage
 
-### Training Models
+### Building the Phrase Graph
 
-1. Open the app and navigate to the "Training" tab
-2. Click "Select Directory" and choose your music collection folder
-3. Click "Analyze Collection" to scan and prepare training data
-4. Train classification models to understand styles in your collection
-5. (Future) Train generative models for audio synthesis
+1. **Analyze Library**: Run `scripts/analyze_library.py` to extract features from your music collection
+   - Detects phrases/segments, tempo, key, energy, beat grids
+   - Outputs analysis JSON files
 
-### Live Performance (Generative)
+2. **Build Graph**: Run `scripts/build_phrase_graph.py` to construct the phrase graph
+   - Creates weighted links between compatible phrases
+   - Generates RGB waveforms for visualization
+   - Outputs `phrase_graph.json`
 
-1. Navigate to the "Performance" tab
-2. Select a style/genre from the dropdown
-3. Adjust tempo (BPM) and energy sliders
-4. The generative engine synthesizes audio matching your controls
-5. Use mixing controls (crossfade, volume, EQ) for live performance
-6. (Helper) View example tracks/segments that match current output for debugging
+### HyperMusic Navigation
 
-## Synthesis Approaches
+1. **Start Playback**: The app loads the phrase graph and starts playing from a random phrase
+2. **View Timeline**: See the current phrase in the center with compatible branches
+3. **Navigate**: Tap any compatible phrase to queue a transition at the next phrase boundary
+4. **DJ Controls**: Use dual-deck controls for cue/preview and professional mixing
+5. **Waveform Visualization**: Monitor RGB waveforms showing bass/mid/high frequencies
 
-MusicMill supports multiple synthesis backends:
+## Musical Compatibility Scoring
 
-### 1. Granular Synthesis (Swift/Native)
-- Breaks audio into small "grains" (10-100ms)
-- Recombines grains with pitch/time manipulation
-- Low latency, runs natively in Swift
-- Good for texture and ambient generation
+Phrases are linked in the graph based on weighted compatibility scores:
 
-### 2. RAVE Neural Synthesis (PyTorch MPS)
-- Deep learning variational autoencoder for audio
-- Trained on your music collection
-- Generates continuous, musical output
-- Runs at **291x realtime** on M3 Max via MPS
+- **Tempo Score**: Same BPM (±5%), half-time, or double-time relationships
+- **Key Score**: Same key, relative major/minor, or circle of fifths neighbors  
+- **Energy Score**: Similar energy levels or complementary builds/drops
+- **Spectral Score**: Timbral matching via spectral centroid similarity
 
-#### RAVE Control Mapping
+Each link has a total weight (0-1) and suggested transition type (crossfade, EQ swap, cut, filter).
 
-| MusicMill Control | RAVE Implementation |
-|-------------------|---------------------|
-| **Style** | Interpolate between encoded style anchors |
-| **Energy** | Scale latent magnitude (0.3x - 2.0x) |
-| **Tempo** | Stretch/compress latent time axis |
-| **Timbre** | Individual latent dimension weights |
+## Experimental Features
 
-The key insight: RAVE compresses audio into a low-dimensional latent space (4 dimensions). Each dimension captures different audio characteristics. By encoding reference tracks from your collection and manipulating these latent vectors, you get intuitive control over the generated output.
+### ML Classification (Early Experiments)
+- Style/genre classification using MLSoundClassifier
+- Can be used for filtering or organizing phrases by style
+- See `MusicMill/ML/` for implementation
 
-See `docs/RAVE_INTEGRATION.md` for detailed technical documentation.
+### Generative Synthesis (Research/Future)
+- **Granular Synthesis**: Real-time grain-based audio generation (experimental)
+- **RAVE Neural Synthesis**: Deep learning audio generation via PyTorch MPS (research)
+  - See `docs/RAVE_INTEGRATION.md` for technical details
+  - Runs at **291x realtime** on M3 Max via MPS
+  - Experimental control mapping: style interpolation, energy scaling, tempo stretching
 
 ## Technical Details
 
-- Uses AVFoundation for audio I/O and real-time synthesis
-- MLSoundClassifier for style/genre classification (stepping stone)
-- Core ML for model inference (classification)
-- **PyTorch MPS** for RAVE neural synthesis (Apple Silicon GPU)
-- SwiftUI for the user interface
-- Combine framework for reactive programming
-- **Challenge**: Real-time audio generation is complex - initial output may be experimental/poor quality, but that's part of the exploration
+- **Audio Analysis**: Uses librosa (Python) for tempo, key, energy, spectral analysis, and phrase detection
+- **Graph Storage**: Phrase graph stored as JSON in `~/Documents/MusicMill/Analysis/`
+- **Playback**: AVFoundation for real-time audio playback with phrase boundary detection
+- **UI**: SwiftUI for the performance interface with Combine for reactive updates
+- **Waveforms**: RGB waveform extraction (bass/mid/high frequency bands) for DJ-style visualization
 
-## Training Data Sources
+## Analysis Output
 
-The system can learn from multiple sources:
-
-1. **Audio Data**: Raw audio files for unsupervised learning
-2. **Directory Structure**: Folders as style/genre labels
-3. **Rekordbox Metadata**: 
-   - Cue points
-   - Play history
-   - Play counts
-   - Other collection metadata
-
-## Notes
-
-- The system organizes training data by directory structure (folders = style labels)
-- Audio segments are extracted for training (30-second clips by default)
-- Tracks are classified once when loading the collection (for debug/helper features)
-- Models are saved locally in Application Support directory
-- **Audio generation is the primary challenge** - this is experimental and initial output quality may be limited
+The analysis pipeline generates:
+- **Per-track analysis**: Tempo, key, energy contour, beat grid, phrase boundaries
+- **Phrase graph**: Weighted graph with compatibility links between phrases
+- **Waveform data**: RGB waveforms for visual display (150 points per phrase)
+- **Metadata**: Track names, segment types, time ranges
 
 ## Future Enhancements
 
-- **RAVE Training Pipeline**: Train custom models on your DJ collection
-- **Latent Space Exploration**: Tools to find meaningful control axes in trained models
-- **Style Anchors**: Encode reference tracks to create style interpolation targets
-- **MIDI Integration**: Map external controllers to latent space parameters
-- **Multi-layer Synthesis**: Blend granular and neural approaches
-- **Recording and Export**: Save generated performances
-- **MLX Port**: Native Apple Silicon neural synthesis (alternative to PyTorch)
+### HyperMusic Improvements
+- **Beat-aligned Immediate Cuts**: Quick switch mode with beat synchronization
+- **DJ-style Transitions**: Crossfade, EQ swap, filter sweep, echo out
+- **Transition Controls**: Duration selector, transition type, manual crossfader
+- **Loop Current Phrase**: Repeat current phrase for extended mixing
+- **Relationship Tracking**: Learn from your transitions to improve compatibility scoring
+
+### Experimental / Research
+- **RAVE Training Pipeline**: Train custom models on your DJ collection (research)
+- **ML Classification**: Improve style/genre classification for filtering
+- **Recording and Export**: Save HyperMusic navigation sessions as mixes
+- **MIDI Integration**: Map external controllers to graph navigation

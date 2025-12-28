@@ -1,0 +1,38 @@
+#	Artwork	Track Title	Artist	Album	BPM	Rating	Time	Key	Date Added
+1		BALANCE	BLVCKCEILING	BALANCE	86.03	     	03:27	11A	2025-12-18
+2		VSN7 x ΔXIUS LIИK - Outcast	VSN7 x ΔXIUS LIИK	ΞRΛ	90.00	     	03:55	12A	2025-12-18
+3		Polytence - Dilemma	Polytence	Fatalité	90.00	     	03:49	12A	2025-12-18
+4		THESE CROSSES ALL OVER MY BODY	Blood Wolf		101.25	     	03:52	11B	2025-12-18
+5		Sleep	ᑡlepsydra		100.00	     	03:12	12A	2025-12-18
+6		Forgotten Dreams	TRVTH x ASMODAI	Forgotten Dreams	155.00	     	03:44	10A	2025-12-18
+7		s4y0rdew	BLVCKCEILING	silver paint	176.90	     	02:45	1A	2025-12-18
+8		ΔXIUS LIИK - ULTIMΔ LΔGRIMΔ	ΔXIUS LIИK	ΞRΛ	103.40	     	03:20	1A	2025-12-18
+9		Disappear	Untitled Burial		85.00	     	03:09	2A	2025-12-18
+10		Energy	Ritual Glass		160.00	     	03:09	5A	2025-12-18
+11		ΔXIUS LIИK - DBT	ΔXIUS LIИK	ΞRΛ	144.00	     	03:57	12A	2025-12-18
+12		₩нэяэ †нэ dэΔd $†îLL dΔи¢э	ℑ⊇≥◊≤⊆ℜ	Zombie Rave H25 - Zombie City	139.48	     	05:09	7A	2025-12-18
+13		Vladah	Damn Whøre		92.00	     	01:51	7A	2025-12-18
+14		Portwave - WΛVELENGHT (ΔXIUS LIИK Remix)	PORTWAVE	ΞRΛ	110.00	     	05:05	8A	2025-12-18
+15		The Descent	TRVTH x ASMODAI	Forgotten Dreams	142.00	     	02:43	9B	2025-12-18
+16		Sidewalks And Skeletons - Prophecy	VRBAN WITCH	SadSummer Singles	110.00	     	03:42	3B	2025-12-18
+17		S L I P	BLVCKCEILING		80.00	     	04:36	4B	2025-12-18
+18		Frost Burn	BITWVLF		140.00	     	02:44	3A	2025-12-18
+19		Around & Around	witchgaze		130.09	     	03:37	6A	2025-12-18
+20		MISLED YOUTH	Blood Wolf		145.00	     	03:33	11A	2025-12-18
+21		uluvme	BLVCKCEILING		165.33	     	05:20	7B	2025-12-18
+22		Ghost	Pino✝Angel		135.01	     	04:58	11A	2025-12-18
+23		Навь	Andy Scream		105.00	     	03:14	6A	2025-12-18
+24		Sorrow	Blvckholes		88.00	     	03:15	2A	2025-12-18
+25		Ashes	LUNÆ		144.00	     	04:06	2A	2025-12-18
+26		ΔXIUS LIИK - ΞRΛSΞ MΞ	ΔXIUS LIИK	ΞRΛ	130.00	     	04:37	2A	2025-12-18
+27		Behind Those Eyes	TRVTH x ASMODAI	Forgotten Dreams	150.00	     	04:03	7A	2025-12-18
+28		Polytence x Flaime - Opium	Polytence	Fatalité	164.99	     	01:56	9A	2025-12-18
+29		Cemetery of Fallen Souls (Remastered)	TRVTH x ASMODAI	Forgotten Dreams	150.00	     	03:32	5A	2025-12-18
+30		Mechanical Replica	TRVTH x ASMODAI	Forgotten Dreams	87.00	     	03:08	1A	2025-12-18
+31		Rebirth	TRVTH x ASMODAI	Forgotten Dreams	130.00	     	03:57	4A	2025-12-18
+32		ΣΕΘ/SET - The Bridge (revisited)	VRBAN WITCH	SadSummer Singles	170.00	     	04:36	8A	2025-12-18
+33		shxde - Betrayal	VRBAN WITCH	SadSummer Singles	105.00	     	03:21	12A	2025-12-18
+34		Friction	TRVTH x ASMODAI	Forgotten Dreams	100.00	     	04:31	9A	2025-12-18
+35		PVTY KERRY - para mi hermosa rosa roja	VRBAN WITCH	SadSummer Singles	146.00	     	07:49	5B	2025-12-18
+36		Lost to Time	TRVTH x ASMODAI	Forgotten Dreams	130.00	     	04:56	11A	2025-12-18
+37		ΔXIUS LIИK - ЯḄЬ	ΔXIUS LIИK	ΞRΛ	98.00	     	03:33	1A	2025-12-18
