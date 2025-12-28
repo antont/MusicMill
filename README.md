@@ -2,6 +2,8 @@
 
 DJ-oriented Music Machine Learning (ML) system for macOS.
 
+<img width="1201" height="839" alt="image" src="https://github.com/user-attachments/assets/6b628737-5aa7-495e-a52e-b9593d6fdc73" />
+
 ## Overview
 
 **Primary Goal**: MusicMill is a generative music instrument that synthesizes new audio in real-time based on your DJ collection. The system learns from your collection's styles and variations, then provides intuitive controls (style, tempo, energy) that allow you to direct the generative output in real-time - similar to how you'd normally switch folders/songs and mix tracks, but creating new music instead of just playing existing tracks.
