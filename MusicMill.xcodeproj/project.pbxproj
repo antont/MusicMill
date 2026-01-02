@@ -11,8 +11,6 @@
 		35AACBAD2EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 in Resources */ = {isa = PBXBuildFile; fileRef = 35AACB942EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 */; };
 		35AACBAE2EF704C7003DAD74 /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9C2EF704C7003DAD74 /* ModelManager.swift */; };
 		35AACBAF2EF704C7003DAD74 /* TrainingDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */; };
-		636630666630666161366463 /* AnalysisStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 303738666235333938653064 /* AnalysisStorage.swift */; };
-		PHRASEDB001002EF704C7003D /* PhraseDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */; };
 		35AACBB02EF704C7003DAD74 /* TrainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA52EF704C7003DAD74 /* TrainingView.swift */; };
 		35AACBB12EF704C7003DAD74 /* StyleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA22EF704C7003DAD74 /* StyleController.swift */; };
 		35AACBB22EF704C7003DAD74 /* AudioAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */; };
@@ -22,38 +20,46 @@
 		35AACBB82EF704C7003DAD74 /* FeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */; };
 		35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB902EF704C7003DAD74 /* MusicMillApp.swift */; };
 		35AACBBA2EF704C7003DAD74 /* PerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACBA02EF704C7003DAD74 /* PerformanceView.swift */; };
-		PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */; };
-		HYPER002BUILD00000000001 /* HyperPhraseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER002FREF00000000001 /* HyperPhraseView.swift */; };
-		GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */; };
 		35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */; };
 		35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */; };
-		A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */; };
+		3CD4BAD69E188054EE1D1281 /* GenerativeModelTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */; };
+		49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */; };
+		615522429CA5A1392DD0C831 /* GenerationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90CE387D266B165E2B7F55D7 /* GenerationController.swift */; };
+		636630666630666161366463 /* AnalysisStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 303738666235333938653064 /* AnalysisStorage.swift */; };
 		84BEB3047D4EF3576A123C72 /* SpectralAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */; };
 		86AE3BD42F18D543459919C7 /* StructureAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */; };
-		F9301E75860C9295F17748A1 /* RekordboxParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */; };
-		3CD4BAD69E188054EE1D1281 /* GenerativeModelTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */; };
-		615522429CA5A1392DD0C831 /* GenerationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90CE387D266B165E2B7F55D7 /* GenerationController.swift */; };
-		49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */; };
-		PHRASE002BUILD00000000001 /* PhrasePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001FREF00000000001 /* PhrasePlayer.swift */; };
-		TRANS001BUILD00000000001 /* TransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = TRANS001FREF00000000001 /* TransitionEngine.swift */; };
-		HYPER001BUILD00000000001 /* HyperPhrasePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */; };
+		8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */; };
+		A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */; };
+		A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */; };
+		AUDIOROUTER01BUILD000001 /* AudioRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUDIOROUTER01FREF000001 /* AudioRouter.swift */; };
 		CONCAT002BUILD00000000001 /* ConcatenativeSynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */; };
-		SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEGMT001MATCH00000000001 /* SegmentMatcher.swift */; };
+		D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */; };
+		DECK00001BUILD00000001 /* Deck.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECK00001FREF00000001 /* Deck.swift */; };
+		DJMIXER001BUILD000001 /* DJMixerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DJMIXER001FREF000001 /* DJMixerView.swift */; };
+		E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */; };
+		F9301E75860C9295F17748A1 /* RekordboxParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */; };
+		GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */; };
+		HYPER001BUILD00000000001 /* HyperPhrasePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */; };
+		HYPER002BUILD00000000001 /* HyperPhraseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER002FREF00000000001 /* HyperPhraseView.swift */; };
+		METALRENDER001BUILD0001 /* MetalWaveformRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = METALRENDER001FREF0001 /* MetalWaveformRenderer.swift */; };
+		METALVIEW001BUILD000001 /* MetalWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = METALVIEW001FREF000001 /* MetalWaveformView.swift */; };
+		PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */; };
+		PHRASE002BUILD00000000001 /* PhrasePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001FREF00000000001 /* PhrasePlayer.swift */; };
+		PHRASEDB001002EF704C7003D /* PhraseDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */; };
+		PREPVIEW001BUILD000001 /* PreparationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PREPVIEW001FREF000001 /* PreparationView.swift */; };
+		QA01234567890123456789AB /* QualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = QA12345678901234567890AB /* QualityAnalyzer.swift */; };
 		RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */; };
 		RAVEB002BUILD00000000001 /* RAVEBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEB001BRIDG00000000001 /* RAVEBridge.swift */; };
-		A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */; };
-		E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */; };
-		D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */; };
-		8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */; };
-		QA01234567890123456789AB /* QualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = QA12345678901234567890AB /* QualityAnalyzer.swift */; };
 		RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEVIEW001FREF00000000001 /* RAVEView.swift */; };
-		WAVEFORM002BUILD00000000001 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORM001FREF00000000001 /* WaveformView.swift */; };
 		RELDB001BUILD00000000001 /* RelationshipDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = RELDB001FREF00000000001 /* RelationshipDatabase.swift */; };
-		AUDIOROUTER01BUILD000001 /* AudioRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUDIOROUTER01FREF000001 /* AudioRouter.swift */; };
-		DECK00001BUILD00000001 /* Deck.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECK00001FREF00000001 /* Deck.swift */; };
+		SEGMT002BUILD00000000001 /* SegmentMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEGMT001MATCH00000000001 /* SegmentMatcher.swift */; };
+		SHADERS001BUILD00000001 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = SHADERS001FREF00000001 /* Shaders.metal */; };
 		THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */ = {isa = PBXBuildFile; fileRef = THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */; };
-		PREPVIEW001BUILD000001 /* PreparationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PREPVIEW001FREF000001 /* PreparationView.swift */; };
-		DJMIXER001BUILD000001 /* DJMixerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DJMIXER001FREF000001 /* DJMixerView.swift */; };
+		TRANS001BUILD00000000001 /* TransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = TRANS001FREF00000000001 /* TransitionEngine.swift */; };
+		WAVEFORM002BUILD00000000001 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORM001FREF00000000001 /* WaveformView.swift */; };
+		WAVEFORMPERF001BUILD000001 /* WaveformPerformanceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORMPERF001FREF000001 /* WaveformPerformanceMonitor.swift */; };
+		WAVEFORMTEST001BUILD00001 /* WaveformRenderingTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORMTEST001FREF00001 /* WaveformRenderingTest.swift */; };
+		WAVEGEN002BUILD00000000001 /* WaveformGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEGEN001FREF00000000001 /* WaveformGenerator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,22 +80,18 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekordboxParser.swift; sourceTree = "<group>"; };
+		303738666235333938653064 /* AnalysisStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisStorage.swift; sourceTree = "<group>"; };
 		35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioAnalyzer.swift; sourceTree = "<group>"; };
 		35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureExtractor.swift; sourceTree = "<group>"; };
 		35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrainingDataManager.swift; sourceTree = "<group>"; };
-		303738666235333938653064 /* AnalysisStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisStorage.swift; sourceTree = "<group>"; };
-		PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseDatabase.swift; sourceTree = "<group>"; };
 		35AACB8F2EF704C7003DAD74 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		35AACB902EF704C7003DAD74 /* MusicMillApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicMillApp.swift; sourceTree = "<group>"; };
-		35RAVE0001000000000000001 /* MusicMill.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MusicMill.entitlements; sourceTree = "<group>"; };
 		35AACB942EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "fenv.h-3VT5MAIXTIKH7"; sourceTree = "<group>"; };
 		35AACB9C2EF704C7003DAD74 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTrainer.swift; sourceTree = "<group>"; };
 		35AACB9F2EF704C7003DAD74 /* MixingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixingEngine.swift; sourceTree = "<group>"; };
 		35AACBA02EF704C7003DAD74 /* PerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceView.swift; sourceTree = "<group>"; };
-		PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePerformanceView.swift; sourceTree = "<group>"; };
-		HYPER002FREF00000000001 /* HyperPhraseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhraseView.swift; sourceTree = "<group>"; };
-		GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularPerformanceView.swift; sourceTree = "<group>"; };
 		35AACBA12EF704C7003DAD74 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		35AACBA22EF704C7003DAD74 /* StyleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleController.swift; sourceTree = "<group>"; };
 		35AACBA32EF704C7003DAD74 /* TrackSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSelector.swift; sourceTree = "<group>"; };
@@ -99,33 +101,42 @@
 		35D5294A2EF6FE940048C1C9 /* MusicMill.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MusicMill.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		35D529592EF6FE950048C1C9 /* MusicMillTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MusicMillTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		35D529632EF6FE950048C1C9 /* MusicMillUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MusicMillUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentExtractor.swift; sourceTree = "<group>"; };
+		59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralGenerator.swift; sourceTree = "<group>"; };
+		717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerativeModelTrainer.swift; sourceTree = "<group>"; };
 		89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectralAnalyzer.swift; sourceTree = "<group>"; };
 		8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructureAnalyzer.swift; sourceTree = "<group>"; };
-		1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekordboxParser.swift; sourceTree = "<group>"; };
-		QA12345678901234567890AB /* QualityAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityAnalyzer.swift; sourceTree = "<group>"; };
-		717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerativeModelTrainer.swift; sourceTree = "<group>"; };
 		90CE387D266B165E2B7F55D7 /* GenerationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationController.swift; sourceTree = "<group>"; };
-		D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularSynthesizer.swift; sourceTree = "<group>"; };
-		PHRASE001FREF00000000001 /* PhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePlayer.swift; sourceTree = "<group>"; };
-		TRANS001FREF00000000001 /* TransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionEngine.swift; sourceTree = "<group>"; };
-		HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhrasePlayer.swift; sourceTree = "<group>"; };
+		AUDIOROUTER01FREF000001 /* AudioRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRouter.swift; sourceTree = "<group>"; };
 		B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleLibrary.swift; sourceTree = "<group>"; };
+		C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisEngine.swift; sourceTree = "<group>"; };
 		CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConcatenativeSynthesizer.swift; sourceTree = "<group>"; };
-		SEGMT001MATCH00000000001 /* SegmentMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentMatcher.swift; sourceTree = "<group>"; };
+		D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularSynthesizer.swift; sourceTree = "<group>"; };
+		DECK00001FREF00000001 /* Deck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Deck.swift; sourceTree = "<group>"; };
+		DJMIXER001FREF000001 /* DJMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJMixerView.swift; sourceTree = "<group>"; };
+		E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleGenerator.swift; sourceTree = "<group>"; };
+		FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentExtractor.swift; sourceTree = "<group>"; };
+		GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularPerformanceView.swift; sourceTree = "<group>"; };
+		HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhrasePlayer.swift; sourceTree = "<group>"; };
+		HYPER002FREF00000000001 /* HyperPhraseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhraseView.swift; sourceTree = "<group>"; };
+		METALRENDER001FREF0001 /* MetalWaveformRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalWaveformRenderer.swift; sourceTree = "<group>"; };
+		METALVIEW001FREF000001 /* MetalWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalWaveformView.swift; sourceTree = "<group>"; };
+		PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePerformanceView.swift; sourceTree = "<group>"; };
+		PHRASE001FREF00000000001 /* PhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePlayer.swift; sourceTree = "<group>"; };
+		PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseDatabase.swift; sourceTree = "<group>"; };
+		PREPVIEW001FREF000001 /* PreparationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparationView.swift; sourceTree = "<group>"; };
+		QA12345678901234567890AB /* QualityAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityAnalyzer.swift; sourceTree = "<group>"; };
 		RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVESynthesizer.swift; sourceTree = "<group>"; };
 		RAVEB001BRIDG00000000001 /* RAVEBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEBridge.swift; sourceTree = "<group>"; };
-		E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleGenerator.swift; sourceTree = "<group>"; };
-		59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeuralGenerator.swift; sourceTree = "<group>"; };
-		C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthesisEngine.swift; sourceTree = "<group>"; };
 		RAVEVIEW001FREF00000000001 /* RAVEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEView.swift; sourceTree = "<group>"; };
-		WAVEFORM001FREF00000000001 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		RELDB001FREF00000000001 /* RelationshipDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationshipDatabase.swift; sourceTree = "<group>"; };
-		AUDIOROUTER01FREF000001 /* AudioRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRouter.swift; sourceTree = "<group>"; };
-		DECK00001FREF00000001 /* Deck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Deck.swift; sourceTree = "<group>"; };
+		SEGMT001MATCH00000000001 /* SegmentMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SegmentMatcher.swift; sourceTree = "<group>"; };
+		SHADERS001FREF00000001 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreeBandEQ.swift; sourceTree = "<group>"; };
-		PREPVIEW001FREF000001 /* PreparationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreparationView.swift; sourceTree = "<group>"; };
-		DJMIXER001FREF000001 /* DJMixerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DJMixerView.swift; sourceTree = "<group>"; };
+		TRANS001FREF00000000001 /* TransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionEngine.swift; sourceTree = "<group>"; };
+		WAVEFORM001FREF00000000001 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
+		WAVEFORMPERF001FREF000001 /* WaveformPerformanceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformPerformanceMonitor.swift; sourceTree = "<group>"; };
+		WAVEFORMTEST001FREF00001 /* WaveformRenderingTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformRenderingTest.swift; sourceTree = "<group>"; };
+		WAVEGEN001FREF00000000001 /* WaveformGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformGenerator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -172,14 +183,15 @@
 				35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */,
 				35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */,
 				35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */,
-					303738666235333938653064 /* AnalysisStorage.swift */,
-					PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */,
-							FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */,
+				303738666235333938653064 /* AnalysisStorage.swift */,
+				PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */,
+				FA013C3E695C2E8BAE3DC63D /* SegmentExtractor.swift */,
 				89A24625BEE83A7F314BA149 /* SpectralAnalyzer.swift */,
+				WAVEGEN001FREF00000000001 /* WaveformGenerator.swift */,
 				8B3FE1E67C761EF15E751D14 /* StructureAnalyzer.swift */,
 				1758A12EAF82FB79CEA7295A /* RekordboxParser.swift */,
 				QA12345678901234567890AB /* QualityAnalyzer.swift */,
-);
+			);
 			path = Analysis;
 			sourceTree = "<group>";
 		};
@@ -255,8 +267,8 @@
 			children = (
 				35AACB9C2EF704C7003DAD74 /* ModelManager.swift */,
 				35AACB9D2EF704C7003DAD74 /* ModelTrainer.swift */,
-							717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */,
-);
+				717FAD3EB3095E444CFC1076 /* GenerativeModelTrainer.swift */,
+			);
 			path = ML;
 			sourceTree = "<group>";
 		};
@@ -271,31 +283,17 @@
 				35AACBA12EF704C7003DAD74 /* PlaybackController.swift */,
 				35AACBA22EF704C7003DAD74 /* StyleController.swift */,
 				35AACBA32EF704C7003DAD74 /* TrackSelector.swift */,
-							90CE387D266B165E2B7F55D7 /* GenerationController.swift */,
+				90CE387D266B165E2B7F55D7 /* GenerationController.swift */,
 				WAVEFORM001FREF00000000001 /* WaveformView.swift */,
+				METALRENDER001FREF0001 /* MetalWaveformRenderer.swift */,
+				METALVIEW001FREF000001 /* MetalWaveformView.swift */,
+				WAVEFORMPERF001FREF000001 /* WaveformPerformanceMonitor.swift */,
+				WAVEFORMTEST001FREF00001 /* WaveformRenderingTest.swift */,
+				SHADERS001FREF00000001 /* Shaders.metal */,
 				PREPVIEW001FREF000001 /* PreparationView.swift */,
 				DJMIXER001FREF000001 /* DJMixerView.swift */,
-);
-			path = Performance;
-			sourceTree = "<group>";
-		};
-		D1DE63D3E15EC9D5B93CB6F6 /* Generation */ = {
-			isa = PBXGroup;
-			children = (
-				D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */,
-				PHRASE001FREF00000000001 /* PhrasePlayer.swift */,
-				TRANS001FREF00000000001 /* TransitionEngine.swift */,
-				HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */,
-				B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */,
-				E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */,
-				59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */,
-				C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */,
-				CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */,
-				SEGMT001MATCH00000000001 /* SegmentMatcher.swift */,
-				RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */,
-				RAVEB001BRIDG00000000001 /* RAVEBridge.swift */,
 			);
-			path = Generation;
+			path = Performance;
 			sourceTree = "<group>";
 		};
 		35AACBA62EF704C7003DAD74 /* Training */ = {
@@ -304,22 +302,6 @@
 				35AACBA52EF704C7003DAD74 /* TrainingView.swift */,
 			);
 			path = Training;
-			sourceTree = "<group>";
-		};
-		VIEWS001GRP000000000001 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				RAVEVIEW001FREF00000000001 /* RAVEView.swift */,
-			);
-			path = Views;
-			sourceTree = "<group>";
-		};
-		DATA001GRP000000000001 /* Data */ = {
-			isa = PBXGroup;
-			children = (
-				RELDB001FREF00000000001 /* RelationshipDatabase.swift */,
-			);
-			path = Data;
 			sourceTree = "<group>";
 		};
 		35AACBA92EF704C7003DAD74 /* MusicMill */ = {
@@ -365,6 +347,41 @@
 				35D529632EF6FE950048C1C9 /* MusicMillUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D1DE63D3E15EC9D5B93CB6F6 /* Generation */ = {
+			isa = PBXGroup;
+			children = (
+				D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */,
+				PHRASE001FREF00000000001 /* PhrasePlayer.swift */,
+				TRANS001FREF00000000001 /* TransitionEngine.swift */,
+				HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */,
+				B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */,
+				E53BA51C8E1A8CE6494F33B0 /* SampleGenerator.swift */,
+				59CFC98CE411BEF8D3705AF9 /* NeuralGenerator.swift */,
+				C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */,
+				CONCAT001SYNTH00000000001 /* ConcatenativeSynthesizer.swift */,
+				SEGMT001MATCH00000000001 /* SegmentMatcher.swift */,
+				RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */,
+				RAVEB001BRIDG00000000001 /* RAVEBridge.swift */,
+			);
+			path = Generation;
+			sourceTree = "<group>";
+		};
+		DATA001GRP000000000001 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				RELDB001FREF00000000001 /* RelationshipDatabase.swift */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		VIEWS001GRP000000000001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				RAVEVIEW001FREF00000000001 /* RAVEView.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -534,8 +551,9 @@
 				GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */,
 				35AACBBB2EF704C7003DAD74 /* MixingEngine.swift in Sources */,
 				35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */,
-							A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */,
+				A02A575ED9520B36A1ED4A42 /* SegmentExtractor.swift in Sources */,
 				84BEB3047D4EF3576A123C72 /* SpectralAnalyzer.swift in Sources */,
+				WAVEGEN002BUILD00000000001 /* WaveformGenerator.swift in Sources */,
 				86AE3BD42F18D543459919C7 /* StructureAnalyzer.swift in Sources */,
 				F9301E75860C9295F17748A1 /* RekordboxParser.swift in Sources */,
 				QA01234567890123456789AB /* QualityAnalyzer.swift in Sources */,
@@ -551,6 +569,11 @@
 				RAVEB002BUILD00000000001 /* RAVEBridge.swift in Sources */,
 				RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */,
 				WAVEFORM002BUILD00000000001 /* WaveformView.swift in Sources */,
+				METALRENDER001BUILD0001 /* MetalWaveformRenderer.swift in Sources */,
+				METALVIEW001BUILD000001 /* MetalWaveformView.swift in Sources */,
+				WAVEFORMPERF001BUILD000001 /* WaveformPerformanceMonitor.swift in Sources */,
+				WAVEFORMTEST001BUILD00001 /* WaveformRenderingTest.swift in Sources */,
+				SHADERS001BUILD00000001 /* Shaders.metal in Sources */,
 				A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */,
 				E65A5E83FFDB83A28558C18B /* SampleGenerator.swift in Sources */,
 				D15A6EEC58530936BFAE01DC /* NeuralGenerator.swift in Sources */,
@@ -561,7 +584,7 @@
 				THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */,
 				PREPVIEW001BUILD000001 /* PreparationView.swift in Sources */,
 				DJMIXER001BUILD000001 /* DJMixerView.swift in Sources */,
-);
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		35D529552EF6FE950048C1C9 /* Sources */ = {

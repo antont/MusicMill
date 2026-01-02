@@ -36,6 +36,7 @@ class HyperPhrasePlayer: ObservableObject {
     @Published private(set) var isPlaying: Bool = false
     @Published private(set) var transitionProgress: Float = 0.0
     @Published private(set) var playbackProgress: Double = 0.0  // 0-1 position in current phrase
+    @Published private(set) var trackPlaybackProgress: Double = 0.0  // 0-1 position in full track (for full waveform display)
     @Published private(set) var loadingError: String?
     
     // MARK: - Properties
@@ -431,9 +432,10 @@ class HyperPhrasePlayer: ObservableObject {
         advanceToPhrase(phrase)
     }
     
-    /// Update playback progress (0-1 within current phrase)
+    /// Update playback progress (0-1 within current phrase and full track)
     private func updatePlaybackProgress() {
-        guard let phrase = state.currentPhrase else { return }
+        guard let phrase = state.currentPhrase,
+              let currentSongBuffer = currentSongBuffer else { return }
         
         let phraseStart = phrase.startTime ?? 0
         let phraseEnd = phrase.endTime ?? phrase.duration
@@ -445,9 +447,15 @@ class HyperPhrasePlayer: ObservableObject {
         let phraseRelativeTime = currentTime - phraseStart
         let progress = min(1.0, max(0.0, phraseRelativeTime / phraseDuration))
         
-        if abs(progress - playbackProgress) > 0.005 {
+        // Calculate track-relative progress
+        let totalSongDuration = Double(currentSongBuffer.frameLength) / sampleRate
+        let trackProgress = min(1.0, max(0.0, currentTime / totalSongDuration))
+        
+        // Update both progress values if changed significantly
+        if abs(progress - playbackProgress) > 0.005 || abs(trackProgress - trackPlaybackProgress) > 0.005 {
             DispatchQueue.main.async { [weak self] in
                 self?.playbackProgress = progress
+                self?.trackPlaybackProgress = trackProgress
             }
         }
     }

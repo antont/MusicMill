@@ -32,6 +32,12 @@ struct HyperPhraseView: View {
     // Cue monitoring
     @State private var cueEnabled = false
     
+    // Debug/Performance UI
+    @State private var useDirectRendering = false
+    @State private var showPerformanceMetrics = false
+    @State private var showPerformanceTest = false
+    @StateObject private var performanceMonitor = WaveformPerformanceMonitor()
+    
     enum ViewMode: String, CaseIterable {
         case radial = "Radial"
         case matrix = "Matrix"
@@ -168,17 +174,52 @@ struct HyperPhraseView: View {
             .background(Color(white: 0.1))
             
             // Scrolling waveform with centered playhead
-            // Shows: current phrase → next in sequence (continuation)
+            // Shows: full original track waveform (not just phrase segment)
             // If branch loaded: splits to show continuation vs branch alternative
             ScrollingWaveformView(
                 phrase: player.currentPhrase,
                 playbackProgress: player.playbackProgress,
+                trackPlaybackProgress: player.trackPlaybackProgress,
                 nextPhrase: player.getNextInSequence(),
                 branchPhrase: deckB.currentPhrase,
-                color: .orange
+                color: .orange,
+                useOriginalFile: true,  // Use original file waveform instead of phrase segment
+                useDirectRendering: useDirectRendering,  // Use GPU direct rendering if enabled
+                performanceMonitor: performanceMonitor  // Pass monitor for metrics display
             )
+            .overlay(alignment: .topTrailing) {
+                if showPerformanceMetrics {
+                    performanceMetricsOverlay
+                }
+            }
         }
         .background(Color.black)
+    }
+    
+    // MARK: - Performance Metrics Overlay
+    
+    private var performanceMetricsOverlay: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("FPS: \(performanceMonitor.currentFPS, specifier: "%.0f") (Avg: \(performanceMonitor.averageFPS, specifier: "%.0f"))")
+                .font(.caption2)
+                .foregroundColor(.white)
+            Text("Frame Var: \(performanceMonitor.frameTimeVariance, specifier: "%.2f")ms")
+                .font(.caption2)
+                .foregroundColor(.white)
+            Text("Tex Gen: \(performanceMonitor.textureGenTime, specifier: "%.2f")ms")
+                .font(.caption2)
+                .foregroundColor(.white)
+            Text("Tex Upload: \(performanceMonitor.textureUploadTime, specifier: "%.2f")ms")
+                .font(.caption2)
+                .foregroundColor(.white)
+            Text("Tex Gen Count: \(performanceMonitor.textureGenCount)")
+                .font(.caption2)
+                .foregroundColor(.white)
+        }
+        .padding(4)
+        .background(Color.black.opacity(0.7))
+        .cornerRadius(4)
+        .padding(4)
     }
     
     // MARK: - EQ/Mixer Strip
@@ -440,6 +481,8 @@ struct HyperPhraseView: View {
                     transitionSettings
                     Divider()
                     viewModeSelector
+                    Divider()
+                    debugControls
                 }
                 
                 Spacer()
@@ -556,6 +599,39 @@ struct HyperPhraseView: View {
                 }
             }
             .pickerStyle(.segmented)
+        }
+    }
+    
+    private var debugControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Debug")
+                .font(.headline)
+            
+            Toggle("Show Performance Metrics", isOn: $showPerformanceMetrics)
+                .font(.caption)
+            
+            Toggle("Direct GPU Rendering", isOn: $useDirectRendering)
+                .font(.caption)
+            
+            if showPerformanceMetrics {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("FPS: \(performanceMonitor.currentFPS, specifier: "%.0f")")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text("Tex Gen Count: \(performanceMonitor.textureGenCount)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Button("Open Performance Test") {
+                showPerformanceTest = true
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+        }
+        .sheet(isPresented: $showPerformanceTest) {
+            WaveformRenderingTest()
         }
     }
     

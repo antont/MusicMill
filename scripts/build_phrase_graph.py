@@ -88,7 +88,7 @@ class PhraseNode:
 # WAVEFORM EXTRACTION
 # ============================================================================
 
-def extract_waveform_rgb(audio_path: str, num_points: int = 150) -> Optional[Dict]:
+def extract_waveform_rgb(audio_path: str, num_points: int = 500) -> Optional[Dict]:
     """
     Extract low-res RGB waveform data for DJ-style display.
     
@@ -504,7 +504,8 @@ def generate_phrase_waveforms(phrases: List[PhraseNode]):
             if len(segment_audio) < 100:
                 continue
             
-            # Generate waveform from segment
+            # Generate waveform from segment using fixed resolution
+            # Using fixed point count for consistent display across all phrases
             waveform = extract_waveform_from_audio(segment_audio, sr)
             if waveform:
                 phrase.waveform = waveform
@@ -515,7 +516,7 @@ def generate_phrase_waveforms(phrases: List[PhraseNode]):
     print(f"Generated {waveforms_generated} RGB waveforms from {tracks_processed} tracks")
 
 
-def extract_waveform_from_audio(y: np.ndarray, sr: int, num_points: int = 150) -> Optional[Dict]:
+def extract_waveform_from_audio(y: np.ndarray, sr: int, num_points: int = 500) -> Optional[Dict]:
     """
     Extract RGB waveform data from audio array.
     Returns frequency band data: low (bass), mid, high.
@@ -537,11 +538,20 @@ def extract_waveform_from_audio(y: np.ndarray, sr: int, num_points: int = 150) -
         high_band = D[high_mask, :].sum(axis=0)
         
         # Resample to target points
+        # If target is larger than original, interpolate to preserve detail
+        # If target is smaller, downsample
         def resample(arr, target):
-            if len(arr) <= target:
+            if len(arr) == target:
                 return arr
-            indices = np.linspace(0, len(arr) - 1, target).astype(int)
-            return arr[indices]
+            elif len(arr) < target:
+                # Upsample: interpolate to higher resolution
+                x_orig = np.linspace(0, 1, len(arr))
+                x_new = np.linspace(0, 1, target)
+                return np.interp(x_new, x_orig, arr)
+            else:
+                # Downsample: use linear indexing
+                indices = np.linspace(0, len(arr) - 1, target).astype(int)
+                return arr[indices]
         
         low_resampled = resample(low_band, num_points)
         mid_resampled = resample(mid_band, num_points)
