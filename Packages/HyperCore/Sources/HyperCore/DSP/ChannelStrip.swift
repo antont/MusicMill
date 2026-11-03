@@ -12,14 +12,14 @@ import Foundation
 public struct ChannelStrip {
     public var eq: IsolatorEQ
 
-    /// Trim in dB, clamped to −12 … +12.
+    /// Trim in dB, clamped to −12 … +12; non-finite values are treated as 0 dB.
     public var trimDB: Float = 0 {
-        didSet { trimGain.target = powf(10, min(max(trimDB, -12), 12) / 20) }
+        didSet { trimGain.target = trimDB.isFinite ? powf(10, min(max(trimDB, -12), 12) / 20) : 1 }
     }
 
-    /// Fader position 0 … 1 (clamped); gain is the audio taper `fader²`.
+    /// Fader position 0 … 1 (clamped; NaN is treated as 0); gain is the audio taper `fader²`.
     public var fader: Float = 1 {
-        didSet { let f = min(max(fader, 0), 1); faderGain.target = f * f }
+        didSet { let f = fader.isNaN ? 0 : min(max(fader, 0), 1); faderGain.target = f * f }
     }
 
     private var trimGain: SmoothedValue

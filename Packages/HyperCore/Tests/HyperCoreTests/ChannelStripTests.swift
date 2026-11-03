@@ -42,9 +42,7 @@ private func processed(_ input: [Float], configure: (inout ChannelStrip) -> Void
     var strip = ChannelStrip(sampleRate: sr)
     configure(&strip)
     // Let the gain targets settle before audio so only the steady state is measured.
-    var settle = [Float](repeating: 0, count: 4096)
-    _ = run(&strip, settle)
-    settle.removeAll()
+    _ = run(&strip, [Float](repeating: 0, count: 4096))
     return run(&strip, input)
 }
 
@@ -132,6 +130,37 @@ private let stepBound = 1.0 / (0.01 * 44100) + 1e-6
         #expect(worstExcess <= 1e-5)
         #expect(abs(gains.first! - 1) < 1e-4)
         #expect(abs(gains.last!) < 1e-4)
+    }
+
+    /// Stopped decks feed exact zeros; filter state must decay to exactly 0 instead of
+    /// ringing on forever in subnormals (very slow on Intel).
+    @Test func biquadStateFlushesToZeroOnSilence() {
+        let kinds: [(Biquad.Kind, Double)] = [(.lowPass, 200), (.highPass, 200), (.allPass, 2500),
+                                               (.lowPass, 2500), (.highPass, 2500)]
+        for (kind, freq) in kinds {
+            var b = Biquad(kind, frequency: freq, sampleRate: sr)
+            for v in sine(1000, seconds: 0.5) { _ = b.process(l: Double(v), r: -Double(v)) }
+            for _ in 0..<Int(3 * sr) { _ = b.process(l: 0, r: 0) }
+            #expect(b.state.l == (0, 0) && b.state.r == (0, 0), "\(kind) @\(freq) Hz")
+        }
+    }
+
+    @Test func stripOutputIsExactlyZeroOnSilence() {
+        var strip = ChannelStrip(sampleRate: sr)
+        _ = run(&strip, sine(1000, seconds: 0.5))
+        let out = run(&strip, [Float](repeating: 0, count: Int(4 * sr)))
+        #expect(out[Int(3 * sr)...].allSatisfy { $0 == 0 })
+    }
+
+    @Test func nonFiniteTrimAndFaderAreSafe() {
+        var strip = ChannelStrip(sampleRate: sr)
+        strip.trimDB = .nan
+        strip.fader = .nan
+        let g = strip.controlGains()
+        #expect(g.trim == 1)
+        #expect(g.fader == 0)
+        strip.trimDB = .infinity
+        #expect(strip.controlGains().trim == 1)
     }
 
     @Test func smoothedValueReachesTargetWithinRamp() {

@@ -30,12 +30,21 @@ struct Biquad {
         a2 = (1 - alpha) / a0
     }
 
+    /// Current filter state per channel (for tests).
+    var state: (l: (Double, Double), r: (Double, Double)) { (stateL, stateR) }
+
     @inline(__always)
     mutating func process(l: Double, r: Double) -> (Double, Double) {
         let yl = b0 * l + stateL.0
-        stateL = (b1 * l - a1 * yl + stateL.1, b2 * l - a2 * yl)
+        stateL = (Self.flush(b1 * l - a1 * yl + stateL.1), Self.flush(b2 * l - a2 * yl))
         let yr = b0 * r + stateR.0
-        stateR = (b1 * r - a1 * yr + stateR.1, b2 * r - a2 * yr)
+        stateR = (Self.flush(b1 * r - a1 * yr + stateR.1), Self.flush(b2 * r - a2 * yr))
         return (yl, yr)
     }
+
+    /// Flushes tiny state to exactly 0. On silence the recursion otherwise decays into
+    /// subnormal Doubles and stays there forever, which is very slow on Intel CPUs.
+    /// 1e-20 is about −400 dBFS, far below anything audible. Compiles to a compare+select.
+    @inline(__always)
+    private static func flush(_ x: Double) -> Double { abs(x) < 1e-20 ? 0 : x }
 }
