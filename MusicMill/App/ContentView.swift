@@ -6,7 +6,7 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            HyperPhraseView()
+            HyperMusicView()
                 .tabItem {
                     Label("HyperMusic", systemImage: "point.3.connected.trianglepath.dotted")
                 }

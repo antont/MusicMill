@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		HYPERMUSIC01BUILD000001 /* HyperMusicView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPERMUSIC01FREF0000001 /* HyperMusicView.swift */; };
+		HYPERMUSIC02BUILD000001 /* CentreGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPERMUSIC02FREF0000001 /* CentreGraphView.swift */; };
+		HYPERMUSIC03BUILD000001 /* DeckPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPERMUSIC03FREF0000001 /* DeckPanel.swift */; };
+		HYPERMUSIC04BUILD000001 /* MixerPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPERMUSIC04FREF0000001 /* MixerPanel.swift */; };
+		HYPERMUSIC05BUILD000001 /* OutputSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPERMUSIC05FREF0000001 /* OutputSettingsView.swift */; };
+		HYPERMUSIC06BUILD000001 /* HyperShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPERMUSIC06FREF0000001 /* HyperShortcuts.swift */; };
+		HYPERMUSIC07BUILD000001 /* AppAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPERMUSIC07FREF0000001 /* AppAudio.swift */; };
 		35AACBAC2EF704C7003DAD74 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 35AACBA72EF704C7003DAD74 /* Assets.xcassets */; };
 		35AACBAD2EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 in Resources */ = {isa = PBXBuildFile; fileRef = 35AACB942EF704C7003DAD74 /* fenv.h-3VT5MAIXTIKH7 */; };
 		35AACBAE2EF704C7003DAD74 /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35AACB9C2EF704C7003DAD74 /* ModelManager.swift */; };
@@ -24,8 +31,6 @@
 		AUDIOROUTER01BUILD000001 /* AudioRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AUDIOROUTER01FREF000001 /* AudioRouter.swift */; };
 		DECK00001BUILD00000001 /* Deck.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECK00001FREF00000001 /* Deck.swift */; };
 		GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */; };
-		HYPER001BUILD00000000001 /* HyperPhrasePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */; };
-		HYPER002BUILD00000000001 /* HyperPhraseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HYPER002FREF00000000001 /* HyperPhraseView.swift */; };
 		METALRENDER001BUILD0001 /* MetalWaveformRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = METALRENDER001FREF0001 /* MetalWaveformRenderer.swift */; };
 		METALVIEW001BUILD000001 /* MetalWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = METALVIEW001FREF000001 /* MetalWaveformView.swift */; };
 		PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */; };
@@ -37,7 +42,6 @@
 		RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEVIEW001FREF00000000001 /* RAVEView.swift */; };
 		SHADERS001BUILD00000001 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = SHADERS001FREF00000001 /* Shaders.metal */; };
 		THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */ = {isa = PBXBuildFile; fileRef = THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */; };
-		TRANS001BUILD00000000001 /* TransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = TRANS001FREF00000000001 /* TransitionEngine.swift */; };
 		WAVEFORM002BUILD00000000001 /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORM001FREF00000000001 /* WaveformView.swift */; };
 		WAVEFORMPERF001BUILD000001 /* WaveformPerformanceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORMPERF001FREF000001 /* WaveformPerformanceMonitor.swift */; };
 		WAVEFORMTEST001BUILD00001 /* WaveformRenderingTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORMTEST001FREF00001 /* WaveformRenderingTest.swift */; };
@@ -63,6 +67,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		HYPERMUSIC01FREF0000001 /* HyperMusicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperMusicView.swift; sourceTree = "<group>"; };
+		HYPERMUSIC02FREF0000001 /* CentreGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CentreGraphView.swift; sourceTree = "<group>"; };
+		HYPERMUSIC03FREF0000001 /* DeckPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckPanel.swift; sourceTree = "<group>"; };
+		HYPERMUSIC04FREF0000001 /* MixerPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MixerPanel.swift; sourceTree = "<group>"; };
+		HYPERMUSIC05FREF0000001 /* OutputSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputSettingsView.swift; sourceTree = "<group>"; };
+		HYPERMUSIC06FREF0000001 /* HyperShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperShortcuts.swift; sourceTree = "<group>"; };
+		HYPERMUSIC07FREF0000001 /* AppAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAudio.swift; sourceTree = "<group>"; };
 		303738666235333938653064 /* AnalysisStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisStorage.swift; sourceTree = "<group>"; };
 		35AACB8B2EF704C7003DAD74 /* AudioAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioAnalyzer.swift; sourceTree = "<group>"; };
 		35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureExtractor.swift; sourceTree = "<group>"; };
@@ -84,8 +95,6 @@
 		D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularSynthesizer.swift; sourceTree = "<group>"; };
 		DECK00001FREF00000001 /* Deck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Deck.swift; sourceTree = "<group>"; };
 		GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranularPerformanceView.swift; sourceTree = "<group>"; };
-		HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhrasePlayer.swift; sourceTree = "<group>"; };
-		HYPER002FREF00000000001 /* HyperPhraseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HyperPhraseView.swift; sourceTree = "<group>"; };
 		METALRENDER001FREF0001 /* MetalWaveformRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalWaveformRenderer.swift; sourceTree = "<group>"; };
 		METALVIEW001FREF000001 /* MetalWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalWaveformView.swift; sourceTree = "<group>"; };
 		PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhrasePerformanceView.swift; sourceTree = "<group>"; };
@@ -97,7 +106,6 @@
 		RAVEVIEW001FREF00000000001 /* RAVEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEView.swift; sourceTree = "<group>"; };
 		SHADERS001FREF00000001 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreeBandEQ.swift; sourceTree = "<group>"; };
-		TRANS001FREF00000000001 /* TransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionEngine.swift; sourceTree = "<group>"; };
 		WAVEFORM001FREF00000000001 /* WaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformView.swift; sourceTree = "<group>"; };
 		WAVEFORMPERF001FREF000001 /* WaveformPerformanceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformPerformanceMonitor.swift; sourceTree = "<group>"; };
 		WAVEFORMTEST001FREF00001 /* WaveformRenderingTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformRenderingTest.swift; sourceTree = "<group>"; };
@@ -143,6 +151,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		HYPERMUSIC00GROUP000001 /* HyperMusic */ = {
+			isa = PBXGroup;
+			children = (
+				HYPERMUSIC01FREF0000001 /* HyperMusicView.swift */,
+				HYPERMUSIC02FREF0000001 /* CentreGraphView.swift */,
+				HYPERMUSIC03FREF0000001 /* DeckPanel.swift */,
+				HYPERMUSIC04FREF0000001 /* MixerPanel.swift */,
+				HYPERMUSIC05FREF0000001 /* OutputSettingsView.swift */,
+				HYPERMUSIC06FREF0000001 /* HyperShortcuts.swift */,
+				HYPERMUSIC07FREF0000001 /* AppAudio.swift */,
+			);
+			path = HyperMusic;
+			sourceTree = "<group>";
+		};
 		35AACB8E2EF704C7003DAD74 /* Analysis */ = {
 			isa = PBXGroup;
 			children = (
@@ -236,7 +258,6 @@
 			isa = PBXGroup;
 			children = (
 				PHRASE001001EF704C7003DAD74 /* PhrasePerformanceView.swift */,
-				HYPER002FREF00000000001 /* HyperPhraseView.swift */,
 				GRANULAR01001EF704C7003DAD74 /* GranularPerformanceView.swift */,
 				WAVEFORM001FREF00000000001 /* WaveformView.swift */,
 				METALRENDER001FREF0001 /* MetalWaveformRenderer.swift */,
@@ -263,6 +284,7 @@
 				35AACB8E2EF704C7003DAD74 /* Analysis */,
 				35AACB912EF704C7003DAD74 /* App */,
 				35AACB932EF704C7003DAD74 /* Legacy */,
+				HYPERMUSIC00GROUP000001 /* HyperMusic */,
 				35AACB9A2EF704C7003DAD74 /* DerivedData */,
 				35AACB9E2EF704C7003DAD74 /* ML */,
 				35AACBA42EF704C7003DAD74 /* Performance */,
@@ -306,8 +328,6 @@
 			children = (
 				D4944D40165F6CB0FD94D255 /* GranularSynthesizer.swift */,
 				PHRASE001FREF00000000001 /* PhrasePlayer.swift */,
-				TRANS001FREF00000000001 /* TransitionEngine.swift */,
-				HYPER001FREF00000000001 /* HyperPhrasePlayer.swift */,
 				B9190E0EAA158BCD4649F932 /* SampleLibrary.swift */,
 				C99342D1B9308F8BCB5E2C75 /* SynthesisEngine.swift */,
 				RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */,
@@ -487,14 +507,11 @@
 				35AACBB82EF704C7003DAD74 /* FeatureExtractor.swift in Sources */,
 				35AACBB92EF704C7003DAD74 /* MusicMillApp.swift in Sources */,
 				PHRASE001002EF704C7003DAD74 /* PhrasePerformanceView.swift in Sources */,
-				HYPER002BUILD00000000001 /* HyperPhraseView.swift in Sources */,
 				GRANULAR01002EF704C7003DAD74 /* GranularPerformanceView.swift in Sources */,
 				35AACBBC2EF704C7003DAD74 /* ModelTrainer.swift in Sources */,
 				WAVEGEN002BUILD00000000001 /* WaveformGenerator.swift in Sources */,
 				49061C79A3D6CF8E84336E86 /* GranularSynthesizer.swift in Sources */,
 				PHRASE002BUILD00000000001 /* PhrasePlayer.swift in Sources */,
-				TRANS001BUILD00000000001 /* TransitionEngine.swift in Sources */,
-				HYPER001BUILD00000000001 /* HyperPhrasePlayer.swift in Sources */,
 				RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */,
 				RAVEB002BUILD00000000001 /* RAVEBridge.swift in Sources */,
 				RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */,
@@ -510,6 +527,13 @@
 				DECK00001BUILD00000001 /* Deck.swift in Sources */,
 				THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */,
 				PREPVIEW001BUILD000001 /* PreparationView.swift in Sources */,
+				HYPERMUSIC01BUILD000001 /* HyperMusicView.swift in Sources */,
+				HYPERMUSIC02BUILD000001 /* CentreGraphView.swift in Sources */,
+				HYPERMUSIC03BUILD000001 /* DeckPanel.swift in Sources */,
+				HYPERMUSIC04BUILD000001 /* MixerPanel.swift in Sources */,
+				HYPERMUSIC05BUILD000001 /* OutputSettingsView.swift in Sources */,
+				HYPERMUSIC06BUILD000001 /* HyperShortcuts.swift in Sources */,
+				HYPERMUSIC07BUILD000001 /* AppAudio.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -208,6 +208,18 @@ public final class HyperSession {
         }
     }
 
+    // MARK: Messages
+
+    /// Shows a message from outside the session (for example an output routing fallback).
+    public func report(_ text: String) {
+        message = text
+    }
+
+    /// Dismisses the current message.
+    public func clearMessage() {
+        message = nil
+    }
+
     // MARK: Polling
 
     /// Call at about 60 Hz: reads the engine snapshot into the deck models, derives each deck's

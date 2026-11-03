@@ -461,4 +461,13 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         rig.session.tick()
         #expect(rig.loader.liveTracks.map(\.url) == [URL(fileURLWithPath: trackB)])
     }
+
+    @Test func reportAndClearMessage() throws {
+        let rig = try Rig()
+        #expect(rig.session.message == nil)
+        rig.session.report("Output fell back to stereo.")
+        #expect(rig.session.message == "Output fell back to stereo.")
+        rig.session.clearMessage()
+        #expect(rig.session.message == nil)
+    }
 }

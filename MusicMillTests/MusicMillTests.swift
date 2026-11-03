@@ -7,6 +7,7 @@
 
 import Foundation
 import AVFoundation
+import HyperCore
 import Testing
 @testable import MusicMill
 

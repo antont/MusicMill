@@ -10,6 +10,7 @@ import Testing
 import QuartzCore
 import MetalKit
 import AppKit
+import HyperCore
 @testable import MusicMill
 
 struct WaveformPerformanceTests {
