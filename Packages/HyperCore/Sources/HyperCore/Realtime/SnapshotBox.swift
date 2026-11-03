@@ -95,7 +95,7 @@ public final class SnapshotBox<T: BitwiseCopyable>: @unchecked Sendable {
     }
 
     /// Copies `v`'s bytes into one slot's atomic words (relaxed stores). Writer only.
-    @usableFromInline func storeWords(_ v: T, slot: Int) {
+    @inlinable func storeWords(_ v: T, slot: Int) {
         let dest = words + slot * wordCount
         withUnsafeBytes(of: v) { bytes in
             let size = bytes.count
