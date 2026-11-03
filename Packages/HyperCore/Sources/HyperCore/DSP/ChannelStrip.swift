@@ -45,6 +45,27 @@ public struct ChannelStrip {
         }
     }
 
+    /// Trim and EQ only, in place — the post-EQ, pre-fader signal a PFL/cue bus taps.
+    /// Does not advance the fader smoother: pair it with one `nextFaderGain()` call per
+    /// frame. `processPreFader` followed by multiplying each frame by `nextFaderGain()`
+    /// is sample-identical to `process`.
+    public mutating func processPreFader(left: UnsafeMutablePointer<Float>,
+                                         right: UnsafeMutablePointer<Float>,
+                                         frames: Int) {
+        for i in 0..<frames {
+            let trim = trimGain.next()
+            var l = left[i] * trim
+            var r = right[i] * trim
+            eq.process(l: &l, r: &r)
+            left[i] = l
+            right[i] = r
+        }
+    }
+
+    /// The smoothed fader gain (`fader²`) for the next frame; advances the smoother one sample.
+    @inline(__always)
+    public mutating func nextFaderGain() -> Float { faderGain.next() }
+
     /// The *target* gains (not the current smoothed values), for the main-thread centre rule:
     /// - `trim`: linear trim gain, `10^(trimDB/20)` with trimDB clamped to ±12
     /// - `fader`: linear fader gain with the taper applied, `fader²`

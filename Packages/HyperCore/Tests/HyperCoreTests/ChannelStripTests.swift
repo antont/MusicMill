@@ -178,6 +178,21 @@ private let stepBound = 1.0 / (0.01 * 44100) + 1e-6
         #expect(last == 1)
     }
 
+    @Test func preFaderSplitMatchesProcess() {
+        var whole = ChannelStrip(sampleRate: sr), split = ChannelStrip(sampleRate: sr)
+        whole.trimDB = 3; whole.eq.highDB = -6; whole.fader = 0.3
+        split.trimDB = 3; split.eq.highDB = -6; split.fader = 0.3
+        let x = sine(3000, seconds: 0.1)
+        let expected = run(&whole, x)
+        var l = x, r = x
+        l.withUnsafeMutableBufferPointer { lp in r.withUnsafeMutableBufferPointer { rp in
+            split.processPreFader(left: lp.baseAddress!, right: rp.baseAddress!, frames: x.count)
+            for i in 0..<x.count { let f = split.nextFaderGain(); lp[i] *= f; rp[i] *= f }
+        }}
+        #expect(l == expected)
+        #expect(r == expected)
+    }
+
     @Test func controlGainsReportTargets() {
         var strip = ChannelStrip(sampleRate: sr)
         strip.trimDB = 6
