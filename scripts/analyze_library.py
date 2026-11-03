@@ -33,6 +33,22 @@ warnings.filterwarnings('ignore', category=UserWarning)
 SAMPLE_RATE = 22050  # librosa default, good balance of quality/speed
 HOP_LENGTH = 512  # ~23ms at 22050 Hz
 
+PITCH_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+# Krumhansl-Kessler key profiles (tonic first)
+KK_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+KK_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+
+
+def estimate_key(chroma_mean: np.ndarray) -> str:
+    """Best of 24 keys by correlation with rotated KK profiles, e.g. "C" or "F#m"."""
+    best_score, best_key = -np.inf, 'C'
+    for tonic in range(12):
+        for profile, suffix in ((KK_MAJOR, ''), (KK_MINOR, 'm')):
+            score = np.corrcoef(chroma_mean, np.roll(profile, tonic))[0, 1]
+            if score > best_score:
+                best_score, best_key = score, PITCH_NAMES[tonic] + suffix
+    return best_key
+
 
 def analyze_track(audio_path: Path, verbose: bool = False) -> dict:
     """
@@ -133,11 +149,8 @@ def analyze_track(audio_path: Path, verbose: bool = False) -> dict:
     spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=HOP_LENGTH)[0]
     avg_centroid = float(np.mean(spectral_centroid))
     
-    # Key estimation (simplified - most prominent pitch class)
-    chroma_mean = np.mean(chroma, axis=1)
-    key_index = int(np.argmax(chroma_mean))
-    key_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    estimated_key = key_names[key_index]
+    # Key estimation (Krumhansl-Kessler major/minor profiles)
+    estimated_key = estimate_key(np.mean(chroma, axis=1))
     
     return {
         "path": str(audio_path),

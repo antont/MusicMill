@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -45,8 +46,9 @@ TEMPO_EXACT_THRESHOLD = 0.05  # 5% tolerance for "same tempo"
 TEMPO_HALF_DOUBLE_THRESHOLD = 0.1  # 10% tolerance for half/double time
 
 # Key compatibility (circle of fifths)
-KEY_CIRCLE = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'Db', 'Ab', 'Eb', 'Bb', 'F']
 KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+_KEY_RE = re.compile(r'^([A-Ga-g])([#b]?)(m?)$')
+_NATURAL_PC = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
 
 # ============================================================================
 # DATA CLASSES
@@ -158,51 +160,50 @@ def extract_waveform_rgb(audio_path: str, num_points: int = 500) -> Optional[Dic
 # ============================================================================
 
 def normalize_key(key: Optional[str]) -> Optional[str]:
-    """Normalize key name to standard format."""
+    """Normalize to a sharp-only tonic plus "m" for minor (e.g. "C", "F#m").
+
+    Flats become sharps; a bare tonic is read as major. Unparseable -> None.
+    """
     if not key:
         return None
-    
-    # Handle enharmonic equivalents
-    key = key.strip().upper()
-    equivalents = {
-        'DB': 'C#', 'EB': 'D#', 'GB': 'F#', 'AB': 'G#', 'BB': 'A#'
-    }
-    
-    for old, new in equivalents.items():
-        if key == old:
-            return new
-    
-    if key in KEY_NAMES:
-        return key
-    
-    return key
+    m = _KEY_RE.match(key.strip())
+    if not m:
+        return None
+    letter, accidental, minor = m.groups()
+    pc = _NATURAL_PC[letter.upper()]
+    if accidental == '#':
+        pc += 1
+    elif accidental == 'b':
+        pc -= 1
+    return KEY_NAMES[pc % 12] + ('m' if minor else '')
+
+
+def _camelot(key: str) -> Tuple[int, str]:
+    """Camelot (number 1-12, letter A=minor/B=major) for a normalized key."""
+    minor = key.endswith('m')
+    pc = KEY_NAMES.index(key[:-1] if minor else key)
+    if minor:
+        pc = (pc + 3) % 12  # relative major shares the Camelot number
+    return (7 * pc + 7) % 12 + 1, ('A' if minor else 'B')
 
 
 def key_distance(key1: Optional[str], key2: Optional[str]) -> int:
     """
-    Get distance between keys on circle of fifths.
-    Returns 0-6 (0 = same key, 6 = tritone apart)
+    Distance between keys on the Camelot wheel, 0-7.
+    Circular number difference (0-6), plus 1 if letters and numbers both differ.
+    Relative major/minor (same number) = 1. Unknown = 3.
     """
-    if not key1 or not key2:
-        return 3  # Unknown = moderate distance
-    
     k1 = normalize_key(key1)
     k2 = normalize_key(key2)
-    
-    if k1 == k2:
-        return 0
-    
-    # Find positions on circle of fifths
-    try:
-        # Try direct lookup
-        i1 = KEY_CIRCLE.index(k1) if k1 in KEY_CIRCLE else KEY_NAMES.index(k1)
-        i2 = KEY_CIRCLE.index(k2) if k2 in KEY_CIRCLE else KEY_NAMES.index(k2)
-    except ValueError:
-        return 3  # Unknown key
-    
-    # Distance on circle (0-6, wrapping around)
-    dist = abs(i1 - i2)
-    return min(dist, 12 - dist)
+    if k1 is None or k2 is None:
+        return 3
+    n1, l1 = _camelot(k1)
+    n2, l2 = _camelot(k2)
+    diff = abs(n1 - n2)
+    dist = min(diff, 12 - diff)
+    if l1 != l2:
+        dist += 1  # relative major/minor (same number) is 0 + 1 = 1
+    return dist
 
 
 def compute_key_score(key1: Optional[str], key2: Optional[str]) -> float:
