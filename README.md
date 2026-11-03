@@ -57,25 +57,28 @@ HyperMusic: Navigate your music collection as a graph of interconnected phrases.
 
 ## Architecture
 
-The HyperMusic system consists of three main components:
+HyperMusic is built from an analysis pipeline, a Swift package (`HyperCore`) that holds the whole audio engine, and a SwiftUI layer on top.
 
-1. **Analysis Pipeline** (`scripts/analyze_library.py`, `scripts/build_phrase_graph.py`):
-   - Scans music collection for audio files (MP3, AAC, WAV, AIFF, M4A)
-   - Extracts musical phrases/segments via structure analysis
-   - Computes tempo, key, energy, spectral features, and beat grids
-   - Builds weighted phrase graph with compatibility links
-   - Generates RGB waveforms for visual display
+1. **Analysis Pipeline** (`scripts/analyze_library.py`, `scripts/build_phrase_graph.py`, `scripts/graph_stats.py`):
+   - Scans the music collection (MP3, AAC, WAV, AIFF, M4A)
+   - Extracts phrases, tempo, key, energy, spectral features and beat grids
+   - Builds the weighted phrase graph (`phrase_graph.json`, schema `2.0`)
 
-2. **Phrase Database** (`MusicMill/Analysis/PhraseDatabase.swift`):
-   - Manages phrase graph persistence (JSON format)
-   - Provides graph queries (find compatible phrases, get links, etc.)
-   - Handles graph loading and caching
+2. **HyperCore** (`Packages/HyperCore`): everything except SwiftUI views, testable with `swift test` and no app host.
+   - `Graph/`: graph model, loading and `GraphNavigator` (branch candidates)
+   - `Audio/`: track decoding (any rate or channel count, resampled to the engine rate) and a bounded `TrackCache` that never evicts a track loaded on a deck
+   - `DSP/`: deck players, isolator EQ, channel strips, mixer (4 channels: master L/R, cue L/R) and soft limiter
+   - `Engine/`: `AudioCore`, the render-thread object, plus `CoreCommand` and `CoreSnapshot`
+   - `Realtime/`: lock-free `SPSCQueue` and `SnapshotBox`
+   - `IO/`: `AudioHost` (AVAudioEngine/CoreAudio), device listing, output routing and the aggregate device used for a separate cue device
+   - `Session/`: `HyperSession` (main-actor workflow: load branch, quantized start, centre-phrase tracking) and deck models
+   - `Feedback/`: `RelationshipDatabase` for manual ratings and transition feedback
 
-3. **Playback & Performance Interface** (`MusicMill/Performance/HyperPhraseView.swift`, `MusicMill/Generation/HyperPhrasePlayer.swift`):
-   - Graph-aware playback engine with phrase navigation
-   - Dual-deck DJ interface with cue/preview capabilities
-   - Real-time waveform visualization
-   - Transition engine (reserved for future DJ-style transitions)
+3. **App** (`MusicMill/HyperMusic/`): SwiftUI views (`HyperMusicView`, `DeckPanel`, `MixerPanel`, `CentreGraphView`, `OutputSettingsView`) driven by `HyperSession`. Prep, Phrase, Granular, RAVE and Training tabs are legacy and unchanged.
+
+### Render-thread design
+
+The audio render callback runs in `AudioCore` and follows strict rules: no locks, allocation, logging, Objective-C messaging or main-thread dispatch, and no class retain/release that could free memory. The main actor talks to it only through a single-producer/single-consumer command queue (`CoreCommand`), and the core publishes positions and levels back through an atomic snapshot (`CoreSnapshot` in a `SnapshotBox`). The audio thread never decides UI state: the "current phrase" is derived on the main actor from polled deck positions. Tracks are decoded off-thread and handed to the core as immutable buffers.
 
 ## Requirements
 
@@ -88,48 +91,53 @@ The HyperMusic system consists of three main components:
 
 ```
 MusicMill/
+├── Packages/HyperCore/         # Audio engine, graph, session (swift test)
 ├── MusicMill/
 │   ├── App/                    # App entry point and main views
-│   ├── Analysis/               # Audio analysis and phrase graph
-│   │   ├── PhraseDatabase.swift    # Graph data model and queries
-│   │   ├── FeatureExtractor.swift  # Tempo, key, energy, spectral features
-│   │   ├── StructureAnalyzer.swift  # Phrase/segment detection
-│   │   └── ...
-│   ├── Generation/             # Playback engines
-│   │   ├── HyperPhrasePlayer.swift  # Graph-aware phrase playback
-│   │   ├── TransitionEngine.swift   # DJ-style transitions (future)
-│   │   └── ...
-│   ├── Performance/            # Performance interface
-│   │   ├── HyperPhraseView.swift    # Main graph navigation UI
-│   │   ├── WaveformView.swift       # RGB waveform display
-│   │   ├── Deck.swift               # Dual-deck DJ controls
-│   │   └── ...
-│   ├── ML/                     # ML experiments (classification)
-│   └── Training/               # Training UI (for ML models)
+│   ├── HyperMusic/             # HyperMusic SwiftUI views on HyperSession
+│   ├── Legacy/                 # Legacy deck/EQ/router code for older tabs
+│   └── ...                     # Prep, Phrase, Granular, RAVE, Training tabs
 ├── scripts/
 │   ├── analyze_library.py      # Music collection analysis
-│   ├── build_phrase_graph.py   # Phrase graph construction
-│   ├── rave_server.py          # RAVE inference (experimental)
-│   └── ...
+│   ├── build_phrase_graph.py   # Phrase graph construction (schema 2.0)
+│   ├── graph_stats.py          # Graph sanity statistics
+│   └── tests/                  # pytest suite
 ├── docs/
-│   ├── plans/hypermusic_playback.md  # HyperMusic documentation
-│   └── ...
 └── README.md
 ```
 
 ## Getting Started
 
-1. **Analyze Your Collection**: Run the analysis script to build the phrase graph:
-   ```bash
-   python3 scripts/analyze_library.py /path/to/your/music/collection
-   python3 scripts/build_phrase_graph.py
-   ```
+### Python environment
 
-2. **Open in Xcode**: Build and run the MusicMill app
+```bash
+/opt/homebrew/bin/python3.12 -m venv scripts/.venv
+scripts/.venv/bin/pip install -r scripts/requirements.txt
+```
 
-3. **Load the Graph**: The app will automatically load the phrase graph from `~/Documents/MusicMill/Analysis/`
+### Build the phrase graph
 
-4. **Navigate**: Use the HyperPhraseView to navigate through your collection as a graph
+```bash
+scripts/.venv/bin/python scripts/analyze_library.py /path/to/your/music/collection \
+    -o ~/Documents/MusicMill/Analysis/librosa_analysis.json
+scripts/.venv/bin/python scripts/build_phrase_graph.py ~/Documents/MusicMill/Analysis/librosa_analysis.json
+scripts/.venv/bin/python scripts/graph_stats.py   # sanity-check the result
+```
+
+The app requires graph schema `2.0`. A graph built by an older version is rejected with an "unsupported version" error; rebuild it with `scripts/build_phrase_graph.py`.
+
+### Run the app
+
+Open `MusicMill.xcodeproj` in Xcode and run. The app loads the graph from `~/Documents/MusicMill/PhraseGraph/phrase_graph.json`. Pick the master (and optionally a separate cue) output device in the HyperMusic tab.
+
+### Tests
+
+```bash
+(cd Packages/HyperCore && swift test)      # core suite, fast and offline
+(cd scripts && .venv/bin/pytest -q)        # Python analysis and graph builder
+```
+
+The app unit tests run from Xcode or `xcodebuild -scheme MusicMill test`. To run the core under ThreadSanitizer, use `xcodebuild test -scheme HyperCore -destination 'platform=macOS' -enableThreadSanitizer YES` from `Packages/HyperCore`.
 
 ## Usage
 

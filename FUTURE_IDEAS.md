@@ -38,3 +38,14 @@
 - [ ] Import performance history from Rekordbox to seed transition ratings
 - [ ] Export successful transitions as Rekordbox playlists
 
+
+
+---
+
+## HyperCore Follow-ups (in order)
+
+Recorded from the HyperMusic core rewrite spec (`docs/superpowers/specs/2026-11-03-hypermusic-core-rewrite-design.md`).
+
+1. **Time-stretch / tempo sync / key-lock** - tempo fader or sync between decks; the varispeed bend is currently only a phase-nudging tool.
+2. **Track browser** - choose the starting song instead of a random start phrase.
+3. **MIDI/HID controller layer and gear output routing** (Numark NVII, XDJ-XZ) - see `docs/plans/dj_controller_support_architecture.md`. A controller layer only needs to send the same commands the UI sends.

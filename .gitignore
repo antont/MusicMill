@@ -110,3 +110,5 @@ scripts/.venv/
 Packages/*/.build/
 Packages/*/.swiftpm/
 .superpowers/
+
+__pycache__/
