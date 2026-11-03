@@ -9,7 +9,6 @@ class SynthesisEngine {
     enum SynthesisBackend: String, CaseIterable {
         case phrase = "Phrase"           // Beat-aligned phrase playback (recommended)
         case granular = "Granular"       // Classic granular synthesis (tiny grains)
-        case concatenative = "Concatenative" // Longer segments with crossfading
         case rave = "RAVE"               // Neural synthesis via RAVE
         case hybrid = "Hybrid"           // Combined approaches
         
@@ -19,8 +18,6 @@ class SynthesisEngine {
                 return "Phrase - beat-aligned musical segments, smooth flow"
             case .granular:
                 return "Granular synthesis - tiny audio grains, glitchy/textural"
-            case .concatenative:
-                return "Concatenative - full phrases, smooth crossfades"
             case .rave:
                 return "RAVE neural - AI-generated continuous audio"
             case .hybrid:
@@ -42,7 +39,6 @@ class SynthesisEngine {
     
     private var phrasePlayer: PhrasePlayer?
     private var granularSynthesizer: GranularSynthesizer?
-    private var concatenativeSynthesizer: ConcatenativeSynthesizer?
     private var raveSynthesizer: RAVESynthesizer?
     
     private var currentBackend: SynthesisBackend = .phrase  // Default to phrase mode
@@ -56,7 +52,7 @@ class SynthesisEngine {
         // Synthesizers are created lazily when needed
     }
     
-    /// Initialize with a sample library for granular/concatenative synthesis
+    /// Initialize with a sample library for granular synthesis
     convenience init(sampleLibrary: SampleLibrary) {
         self.init()
         self.sampleLibrary = sampleLibrary
@@ -80,14 +76,6 @@ class SynthesisEngine {
         return granularSynthesizer!
     }
     
-    /// Gets or creates the concatenative synthesizer
-    private func getConcatenativeSynthesizer() -> ConcatenativeSynthesizer {
-        if concatenativeSynthesizer == nil {
-            concatenativeSynthesizer = ConcatenativeSynthesizer()
-        }
-        return concatenativeSynthesizer!
-    }
-    
     /// Gets or creates the RAVE synthesizer
     private func getRaveSynthesizer() -> RAVESynthesizer {
         if raveSynthesizer == nil {
@@ -102,7 +90,7 @@ class SynthesisEngine {
         case .phrase:
             // Available if phrase player has phrases loaded
             return phrasePlayer?.phraseCount ?? 0 > 0
-        case .granular, .concatenative:
+        case .granular:
             // Available if we have samples loaded
             return sampleLibrary?.getAvailableStyles().count ?? 0 > 0
         case .rave:
@@ -140,12 +128,6 @@ class SynthesisEngine {
             var grainParams = GranularSynthesizer.GrainParameters()
             grainParams.amplitude = params.masterVolume
             synth.parameters = grainParams
-            
-        case .concatenative:
-            let synth = getConcatenativeSynthesizer()
-            var concatParams = ConcatenativeSynthesizer.Parameters()
-            concatParams.masterVolume = params.masterVolume
-            synth.setParameters(concatParams)
             
         case .rave:
             let synth = getRaveSynthesizer()
@@ -204,9 +186,6 @@ class SynthesisEngine {
     func loadSample(from url: URL, identifier: String, style: String? = nil) async throws {
         // Load into granular
         try getGranularSynthesizer().loadSource(from: url, identifier: identifier)
-        
-        // Load into concatenative
-        try await getConcatenativeSynthesizer().loadSegment(from: url, identifier: identifier, style: style)
     }
     
     /// Loads samples from sample library
@@ -220,52 +199,8 @@ class SynthesisEngine {
             if let buffer = sample.buffer {
                 let granular = getGranularSynthesizer()
                 granular.loadSourceBuffer(buffer, identifier: sample.id)
-                
-                let concat = getConcatenativeSynthesizer()
-                concat.loadSegment(from: buffer, identifier: sample.id, style: sample.metadata.style)
             }
         }
-    }
-    
-    /// Loads phrases from librosa analysis for the PhrasePlayer
-    func loadPhrasesFromAnalysis(collectionURL: URL) async throws {
-        let storage = AnalysisStorage()
-        
-        guard let analysis = try storage.loadAnalysis(for: collectionURL) else {
-            throw SynthesisError.noSamplesLoaded
-        }
-        
-        let player = getPhrasePlayer()
-        var loadedCount = 0
-        
-        for audioFile in analysis.audioFiles {
-            guard let features = audioFile.features,
-                  features.beats != nil else {
-                // Skip files without beat analysis
-                continue
-            }
-            
-            let url = URL(fileURLWithPath: audioFile.path)
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                continue
-            }
-            
-            do {
-                try player.loadPhrase(from: url, id: url.lastPathComponent, analysis: features)
-                loadedCount += 1
-                
-                // Limit for memory
-                if loadedCount >= 20 {
-                    break
-                }
-            } catch {
-                print("Warning: Could not load phrase from \(url.lastPathComponent): \(error)")
-            }
-        }
-        
-        #if DEBUG
-        print("[SynthesisEngine] Loaded \(loadedCount) phrases for PhrasePlayer")
-        #endif
     }
     
     /// Loads phrase segments from the prepared segments.json file
@@ -397,8 +332,6 @@ class SynthesisEngine {
             try getPhrasePlayer().start()
         case .granular:
             try getGranularSynthesizer().start()
-        case .concatenative:
-            try getConcatenativeSynthesizer().start()
         case .rave:
             try getRaveSynthesizer().start()
         case .hybrid:
@@ -412,7 +345,6 @@ class SynthesisEngine {
     func stop() {
         phrasePlayer?.stop()
         granularSynthesizer?.stop()
-        concatenativeSynthesizer?.stop()
         raveSynthesizer?.stop()
         isPlaying = false
     }
@@ -429,8 +361,6 @@ class SynthesisEngine {
             return nil // PhrasePlayer manages its own engine internally
         case .granular:
             return granularSynthesizer?.getAudioEngine()
-        case .concatenative:
-            return concatenativeSynthesizer?.getAudioEngine()
         case .rave:
             return raveSynthesizer?.getAudioEngine()
         case .hybrid:

@@ -103,3 +103,9 @@ iOSInjectionProject/
 *.h5
 *.ckpt
 
+
+# Local/tooling artifacts
+*.profraw
+scripts/.venv/
+Packages/*/.build/
+.superpowers/

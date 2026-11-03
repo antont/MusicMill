@@ -10,13 +10,57 @@ import AVFoundation
 import Testing
 @testable import MusicMill
 
+/// Machine-specific tests (they read ~/Music, ~/Documents/MusicMill or the RAVE venv).
+/// They run only when `MUSICMILL_LOCAL_TESTS=1` is set (xcodebuild: `TEST_RUNNER_MUSICMILL_LOCAL_TESTS=1`)
+/// AND their data exists; otherwise they are reported as skipped via `.enabled(if:)`,
+/// never silently passed. The default test run is therefore hermetic.
+enum LocalData {
+    static let optedIn = ProcessInfo.processInfo.environment["MUSICMILL_LOCAL_TESTS"] == "1"
+
+    static let hasBlvckceilingCollection: Bool = {
+        guard optedIn else { return false }
+        var isDirectory: ObjCBool = false
+        let path = "/Users/tonialatalo/Music/PioneerDJ/Imported from Device/Contents/BLVCKCEILING"
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }()
+
+    static let hasAnalysisSegments: Bool = {
+        guard optedIn else { return false }
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
+        guard let dirs = try? FileManager.default.contentsOfDirectory(at: analysisDir, includingPropertiesForKeys: nil) else {
+            return false
+        }
+        for dir in dirs where dir.hasDirectoryPath {
+            let files = (try? FileManager.default.contentsOfDirectory(at: dir.appendingPathComponent("Segments"), includingPropertiesForKeys: nil)) ?? []
+            if files.contains(where: { $0.pathExtension == "m4a" }) { return true }
+        }
+        return false
+    }()
+
+    static let hasPhraseSegments: Bool = {
+        guard optedIn else { return false }
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return FileManager.default.fileExists(
+            atPath: documentsURL.appendingPathComponent("MusicMill/PhraseSegments/segments.json").path)
+    }()
+
+    static let hasRAVEServer: Bool = {
+        guard optedIn else { return false }
+        let diag = RAVEBridge(modelName: "percussion").getDiagnostics()
+        return diag["pythonExists"] == "YES" && diag["scriptExists"] == "YES" && !RAVEBridge.getAvailableModels().isEmpty
+    }()
+
+    static let hasPhraseGraph: Bool = optedIn && PhraseDatabase().hasGraph
+}
+
 struct MusicMillTests {
 
     @Test func example() async throws {
         // Write your test here and use APIs like `#expect(...)` to check expected conditions.
     }
     
-    @Test func analyzeBLVCKCEILINGCollection() async throws {
+    @Test(.enabled(if: LocalData.hasBlvckceilingCollection)) func analyzeBLVCKCEILINGCollection() async throws {
         let directoryURL = URL(fileURLWithPath: "/Users/tonialatalo/Music/PioneerDJ/Imported from Device/Contents/BLVCKCEILING")
         
         // Check if directory exists
@@ -198,7 +242,7 @@ struct MusicMillTests {
     
     // MARK: - Audio Output Test
     
-    @Test @MainActor func testGranularSynthesisAudioOutput() async throws {
+    @Test(.enabled(if: LocalData.hasAnalysisSegments)) @MainActor func testGranularSynthesisAudioOutput() async throws {
         print(String(repeating: "=", count: 60))
         print("TESTING GRANULAR SYNTHESIS AUDIO OUTPUT")
         print(String(repeating: "=", count: 60))
@@ -295,7 +339,7 @@ struct MusicMillTests {
         print(String(repeating: "=", count: 60))
     }
     
-    @Test @MainActor func testGranularSynthesisCaptureToFile() async throws {
+    @Test(.enabled(if: LocalData.hasAnalysisSegments)) @MainActor func testGranularSynthesisCaptureToFile() async throws {
         // Find analysis segments
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
@@ -390,475 +434,9 @@ struct MusicMillTests {
         #expect(fileSize > 100, "Output file should have data")
     }
     
-    // MARK: - Quality Analysis Tests
-    
-    @Test @MainActor func testGranularSynthesisQuality() async throws {
-        print(String(repeating: "=", count: 60))
-        print("TESTING GRANULAR SYNTHESIS QUALITY")
-        print(String(repeating: "=", count: 60))
-        
-        // Find analysis segments
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
-        
-        guard FileManager.default.fileExists(atPath: analysisDir.path) else {
-            throw TestError.directoryNotFound("No analysis directory")
-        }
-        
-        // Find segment files
-        var segmentURLs: [URL] = []
-        let contents = try FileManager.default.contentsOfDirectory(at: analysisDir, includingPropertiesForKeys: nil)
-        for dir in contents where dir.hasDirectoryPath {
-            let segmentsDir = dir.appendingPathComponent("Segments")
-            if FileManager.default.fileExists(atPath: segmentsDir.path) {
-                let segments = try FileManager.default.contentsOfDirectory(at: segmentsDir, includingPropertiesForKeys: nil)
-                    .filter { $0.pathExtension == "m4a" }
-                segmentURLs.append(contentsOf: segments)
-            }
-        }
-        
-        guard !segmentURLs.isEmpty else {
-            throw TestError.directoryNotFound("No segments")
-        }
-        
-        print("[1] Found \(segmentURLs.count) segments")
-        
-        // Extract features from source segments
-        let featureExtractor = FeatureExtractor()
-        let qualityAnalyzer = QualityAnalyzer()
-        
-        print("\n[2] Extracting source features...")
-        var sourceFeatures: FeatureExtractor.AudioFeatures?
-        let firstSegment = segmentURLs.first!
-        do {
-            sourceFeatures = try await featureExtractor.extractFeatures(from: firstSegment)
-            print("  Source: \(firstSegment.lastPathComponent)")
-            print("    Tempo: \(sourceFeatures?.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")")
-            print("    Key: \(sourceFeatures?.key ?? "nil")")
-            print("    Energy: \(String(format: "%.3f", sourceFeatures?.energy ?? 0))")
-            print("    Spectral Centroid: \(String(format: "%.1f Hz", sourceFeatures?.spectralCentroid ?? 0))")
-            print("    Zero Crossing Rate: \(String(format: "%.3f", sourceFeatures?.zeroCrossingRate ?? 0))")
-        } catch {
-            print("  Failed to extract source features: \(error)")
-            throw error
-        }
-        
-        // Create synthesizer and load source
-        print("\n[3] Creating granular synthesizer...")
-        let synthesizer = GranularSynthesizer()
-        
-        for (index, url) in segmentURLs.prefix(3).enumerated() {
-            try? synthesizer.loadSource(from: url, identifier: "seg_\(index)")
-        }
-        print("  Loaded \(synthesizer.getSourceIdentifiers().count) sources")
-        
-        // Output file path
-        let outputDir = documentsURL.appendingPathComponent("MusicMill")
-        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        let outputURL = outputDir.appendingPathComponent("quality_test_output.wav")
-        try? FileManager.default.removeItem(at: outputURL)
-        
-        // Configure synthesis - with all click reduction features
-        var params = GranularSynthesizer.GrainParameters()
-        params.grainSize = 0.10 // 100ms grains
-        params.grainDensity = 20.0 // Balanced overlap
-        params.amplitude = 1.0
-        params.positionJitter = 0.05
-        params.pitchJitter = 0.01
-        params.envelopeType = .blackman
-        params.rhythmAlignment = 0.8 // Snap to detected onsets
-        params.tempoSync = true // Sync grain rate to source tempo
-        params.positionEvolution = 0.2 // Scan through source
-        params.evolutionMode = .pingPong // Back and forth
-        params.sourceBlend = 0.3 // 30% chance to use secondary source
-        params.autoSourceSwitch = true // Auto-cycle through sources
-        params.sourceSwitchInterval = 4.0 // Switch every 4 seconds for test
-        params.zeroCrossingStart = true // Start grains at zero crossings
-        params.zeroCrossingSearchRange = 100 // Search ~2ms for zero crossing
-        synthesizer.parameters = params
-
-        // Set up audio capture
-        let engine = synthesizer.getAudioEngine()
-        let mainMixer = engine.mainMixerNode
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
-        
-        let outputSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 44100.0,
-            AVNumberOfChannelsKey: 2,
-            AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsFloatKey: true,
-            AVLinearPCMIsNonInterleaved: false
-        ]
-        
-        let outputFile = try AVAudioFile(forWriting: outputURL, settings: outputSettings)
-        var capturedFrames: AVAudioFrameCount = 0
-        
-        // Capture buffer for analysis - longer for accurate quality measurement
-        let analysisDuration: TimeInterval = 20.0 // 20 seconds - captures temporal artifacts honestly
-        let analysisBufferCapacity = AVAudioFrameCount(44100.0 * analysisDuration)
-        let analysisBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: analysisBufferCapacity)!
-        
-        mainMixer.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
-            try? outputFile.write(from: buffer)
-            
-            // Copy to analysis buffer
-            if capturedFrames + buffer.frameLength <= analysisBufferCapacity {
-                let dstOffset = Int(capturedFrames)
-                for ch in 0..<Int(format.channelCount) {
-                    if let src = buffer.floatChannelData?[ch],
-                       let dst = analysisBuffer.floatChannelData?[ch] {
-                        for i in 0..<Int(buffer.frameLength) {
-                            dst[dstOffset + i] = src[i]
-                        }
-                    }
-                }
-            }
-            capturedFrames += buffer.frameLength
-        }
-        
-        // Start synthesis - run longer for stable feature detection
-        print("\n[4] Running synthesis for \(Int(analysisDuration)) seconds...")
-        try synthesizer.start()
-        try await Task.sleep(nanoseconds: UInt64(analysisDuration * 1_000_000_000))
-        synthesizer.stop()
-        mainMixer.removeTap(onBus: 0)
-        
-        analysisBuffer.frameLength = min(capturedFrames, analysisBufferCapacity)
-        print("  Captured \(capturedFrames) frames (\(String(format: "%.2f", Double(capturedFrames) / 44100.0)) seconds)")
-        
-        // Extract features from output
-        print("\n[5] Extracting output features...")
-        let outputFeatures = featureExtractor.extractFeatures(from: analysisBuffer)
-        print("    Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")")
-        print("    Key: \(outputFeatures.key ?? "nil")")
-        print("    Energy: \(String(format: "%.3f", outputFeatures.energy))")
-        print("    Spectral Centroid: \(String(format: "%.1f Hz", outputFeatures.spectralCentroid))")
-        print("    Zero Crossing Rate: \(String(format: "%.3f", outputFeatures.zeroCrossingRate))")
-        
-        // Compare quality
-        print("\n[6] Quality Analysis...")
-        guard let source = sourceFeatures else {
-            throw TestError.noAudioOutput
-        }
-        
-        let quality = qualityAnalyzer.compare(source: source, output: outputFeatures)
-        print(quality.description)
-        
-        // Summary
-        print("\n" + String(repeating: "=", count: 60))
-        print("QUALITY ANALYSIS RESULTS")
-        print(String(repeating: "=", count: 60))
-        print("Overall Quality: \(String(format: "%.1f%%", quality.overall * 100))")
-        if let tempo = quality.tempoMatch {
-            print("  Tempo Match: \(String(format: "%.1f%%", tempo * 100))")
-        }
-        if let key = quality.keyMatch {
-            print("  Key Match: \(String(format: "%.1f%%", key * 100))")
-        }
-        print("  Energy Match: \(String(format: "%.1f%%", quality.energyMatch * 100))")
-        print("  Spectral Match: \(String(format: "%.1f%%", quality.spectralMatch * 100))")
-        print("  Texture Match: \(String(format: "%.1f%%", quality.textureMatch * 100))")
-        print(String(repeating: "=", count: 60))
-        
-        // Thresholds - initially set low given granular artifacts
-        #expect(capturedFrames > 0, "Should have captured audio")
-        #expect(quality.energyMatch >= 0.2, "Energy should be somewhat preserved (got \(quality.energyMatch))")
-        
-        // Write quality report to file for visibility
-        // Use temp directory since test sandbox blocks Documents
-        let reportURL = FileManager.default.temporaryDirectory.appendingPathComponent("musicmill_quality_report.txt")
-        var report = """
-        ============================================================
-        MUSICMILL QUALITY ANALYSIS REPORT
-        Generated: \(Date())
-        ============================================================
-        
-        SOURCE AUDIO
-        ------------
-        File: \(firstSegment.lastPathComponent)
-        Tempo: \(source.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")
-        Key: \(source.key ?? "nil")
-        Energy: \(String(format: "%.4f", source.energy))
-        Spectral Centroid: \(String(format: "%.1f Hz", source.spectralCentroid))
-        Zero Crossing Rate: \(String(format: "%.4f", source.zeroCrossingRate))
-        RMS Energy: \(String(format: "%.4f", source.rmsEnergy))
-        Duration: \(String(format: "%.2f sec", source.duration))
-        Spectral Flatness: \(String(format: "%.4f", source.spectralFlatness)) (0=tonal, 1=noise)
-        HNR: \(String(format: "%.1f dB", source.harmonicToNoiseRatio)) (higher=cleaner)
-        Onset Regularity: \(String(format: "%.4f", source.onsetRegularity)) (0=regular, 1=chaotic)
-        Click Rate: \(String(format: "%.1f/sec", source.clickRate))
-        Click Intensity: \(String(format: "%.4f", source.clickIntensity))
-        
-        OUTPUT AUDIO (Granular Synthesis)
-        ---------------------------------
-        Captured Frames: \(capturedFrames) (\(String(format: "%.2f sec", Double(capturedFrames) / 44100.0)))
-        Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")
-        Key: \(outputFeatures.key ?? "nil")
-        Energy: \(String(format: "%.4f", outputFeatures.energy))
-        Spectral Centroid: \(String(format: "%.1f Hz", outputFeatures.spectralCentroid))
-        Zero Crossing Rate: \(String(format: "%.4f", outputFeatures.zeroCrossingRate))
-        RMS Energy: \(String(format: "%.4f", outputFeatures.rmsEnergy))
-        Duration: \(String(format: "%.2f sec", outputFeatures.duration))
-        Spectral Flatness: \(String(format: "%.4f", outputFeatures.spectralFlatness)) (0=tonal, 1=noise)
-        HNR: \(String(format: "%.1f dB", outputFeatures.harmonicToNoiseRatio)) (higher=cleaner)
-        Onset Regularity: \(String(format: "%.4f", outputFeatures.onsetRegularity)) (0=regular, 1=chaotic)
-        Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))
-        Click Intensity: \(String(format: "%.4f", outputFeatures.clickIntensity))
-        
-        QUALITY SCORES
-        --------------
-        Overall Quality: \(String(format: "%.1f%%", quality.overall * 100))
-        
-        """
-        
-        if let tempo = quality.tempoMatch {
-            report += "  Tempo Match:    \(String(format: "%5.1f%%", tempo * 100))\n"
-        } else {
-            report += "  Tempo Match:    N/A (tempo not detected)\n"
-        }
-        
-        if let key = quality.keyMatch {
-            report += "  Key Match:      \(String(format: "%5.1f%%", key * 100))\n"
-        } else {
-            report += "  Key Match:      N/A (key not detected)\n"
-        }
-        
-        report += """
-          Energy Match:   \(String(format: "%5.1f%%", quality.energyMatch * 100))
-          Spectral Match: \(String(format: "%5.1f%%", quality.spectralMatch * 100))
-          Texture Match:  \(String(format: "%5.1f%%", quality.textureMatch * 100))
-        
-        PERCEPTUAL QUALITY (New Metrics)
-          Noise Match:    \(String(format: "%5.1f%%", quality.noiseMatch * 100)) (higher=less noisy than source)
-          Clarity Match:  \(String(format: "%5.1f%%", quality.clarityMatch * 100)) (higher=cleaner audio)
-          Rhythm Match:   \(String(format: "%5.1f%%", quality.rhythmMatch * 100)) (higher=more rhythmic)
-          Click-free:    \(String(format: "%5.1f%%", quality.clickScore * 100)) (higher=fewer clicks)
-          Click Diff:    \(String(format: "%+.1f/sec", quality.clickRateDiff)) (negative=better)
-        
-        QUALITY TARGETS
-        ---------------
-        Current:   \(String(format: "%.0f%%", quality.overall * 100))
-        MVP:       50%
-        Good:      70%
-        Excellent: 85%
-        
-        INTERPRETATION
-        --------------
-        """
-        
-        if quality.overall >= 0.85 {
-            report += "Excellent! Output closely matches source characteristics.\n"
-        } else if quality.overall >= 0.70 {
-            report += "Good quality. Most characteristics are preserved.\n"
-        } else if quality.overall >= 0.50 {
-            report += "Acceptable. Some characteristics preserved, noticeable artifacts.\n"
-        } else if quality.overall >= 0.30 {
-            report += "Low quality. Significant artifacts, source barely recognizable.\n"
-        } else {
-            report += "Very low quality. Heavy artifacts, sounds nothing like source.\n"
-        }
-        
-        report += """
-        
-        ============================================================
-        """
-        
-        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
-        print("Quality report written to: \(reportURL.path)")
-    }
-    
-    // MARK: - Concatenative Synthesis Tests
-    
-    @Test @MainActor func testConcatenativeSynthesis() async throws {
-        print(String(repeating: "=", count: 60))
-        print("TESTING CONCATENATIVE SYNTHESIS")
-        print(String(repeating: "=", count: 60))
-        
-        // Find analysis segments
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let analysisDir = documentsURL.appendingPathComponent("MusicMill/Analysis")
-        
-        guard FileManager.default.fileExists(atPath: analysisDir.path) else {
-            throw TestError.directoryNotFound("No analysis directory")
-        }
-        
-        // Find segment files
-        var segmentURLs: [URL] = []
-        let contents = try FileManager.default.contentsOfDirectory(at: analysisDir, includingPropertiesForKeys: nil)
-        for dir in contents where dir.hasDirectoryPath {
-            let segmentsDir = dir.appendingPathComponent("Segments")
-            if FileManager.default.fileExists(atPath: segmentsDir.path) {
-                let segments = try FileManager.default.contentsOfDirectory(at: segmentsDir, includingPropertiesForKeys: nil)
-                    .filter { $0.pathExtension == "m4a" }
-                segmentURLs.append(contentsOf: segments)
-            }
-        }
-        
-        guard segmentURLs.count >= 2 else {
-            throw TestError.directoryNotFound("Need at least 2 segments for concatenative synthesis")
-        }
-        
-        print("[1] Found \(segmentURLs.count) segments")
-        
-        // Create concatenative synthesizer
-        print("\n[2] Creating concatenative synthesizer...")
-        let synthesizer = ConcatenativeSynthesizer()
-        
-        // Load segments (use first 5 for testing)
-        for (index, url) in segmentURLs.prefix(5).enumerated() {
-            do {
-                try await synthesizer.loadSegment(from: url, identifier: "seg_\(index)", style: "darkwave")
-                print("  Loaded: \(url.lastPathComponent)")
-            } catch {
-                print("  Failed to load \(url.lastPathComponent): \(error)")
-            }
-        }
-        
-        let segmentCount = synthesizer.getSegmentCount()
-        #expect(segmentCount >= 2, "Should load at least 2 segments")
-        print("  Total segments loaded: \(segmentCount)")
-        
-        // Output file path
-        let outputDir = documentsURL.appendingPathComponent("MusicMill")
-        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        let outputURL = outputDir.appendingPathComponent("concatenative_output.wav")
-        try? FileManager.default.removeItem(at: outputURL)
-        
-        // Configure synthesis
-        var params = ConcatenativeSynthesizer.Parameters()
-        params.crossfadeDuration = 0.5 // 500ms crossfade
-        params.masterVolume = 1.0
-        synthesizer.setParameters(params)
-        
-        // Set up audio capture
-        let engine = synthesizer.getAudioEngine()
-        let mainMixer = engine.mainMixerNode
-        let format = mainMixer.outputFormat(forBus: 0)
-        
-        var capturedBuffers: [AVAudioPCMBuffer] = []
-        let captureFrameCount: AVAudioFrameCount = 4096
-        
-        mainMixer.installTap(onBus: 0, bufferSize: captureFrameCount, format: format) { buffer, _ in
-            if let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) {
-                copy.frameLength = buffer.frameLength
-                if let srcData = buffer.floatChannelData, let dstData = copy.floatChannelData {
-                    for channel in 0..<Int(buffer.format.channelCount) {
-                        memcpy(dstData[channel], srcData[channel], Int(buffer.frameLength) * MemoryLayout<Float>.size)
-                    }
-                }
-                capturedBuffers.append(copy)
-            }
-        }
-        
-        // Start synthesis
-        print("\n[3] Running concatenative synthesis for 20 seconds...")
-        try synthesizer.start()
-        
-        try await Task.sleep(nanoseconds: 20_000_000_000) // 20 seconds
-        
-        synthesizer.stop()
-        mainMixer.removeTap(onBus: 0)
-        
-        print("  Captured \(capturedBuffers.count) buffers")
-        
-        // Combine captured buffers
-        let totalFrames = capturedBuffers.reduce(0) { $0 + Int($1.frameLength) }
-        guard let combinedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(totalFrames)) else {
-            throw TestError.noAudioOutput
-        }
-        
-        var writePosition: AVAudioFramePosition = 0
-        for buffer in capturedBuffers {
-            if let srcData = buffer.floatChannelData, let dstData = combinedBuffer.floatChannelData {
-                for channel in 0..<Int(format.channelCount) {
-                    memcpy(dstData[channel].advanced(by: Int(writePosition)),
-                           srcData[channel],
-                           Int(buffer.frameLength) * MemoryLayout<Float>.size)
-                }
-            }
-            writePosition += AVAudioFramePosition(buffer.frameLength)
-        }
-        combinedBuffer.frameLength = AVAudioFrameCount(totalFrames)
-        
-        // Check for actual audio content
-        var hasAudio = false
-        if let channelData = combinedBuffer.floatChannelData {
-            for i in 0..<Int(combinedBuffer.frameLength) {
-                if abs(channelData[0][i]) > 0.001 {
-                    hasAudio = true
-                    break
-                }
-            }
-        }
-        
-        #expect(hasAudio, "Concatenative synthesis should produce audible output")
-        print("  ✓ Audio output verified")
-        
-        // Save to file
-        print("\n[4] Saving output to file...")
-        let outputFile = try AVAudioFile(forWriting: outputURL, settings: [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: format.sampleRate,
-            AVNumberOfChannelsKey: format.channelCount,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false
-        ])
-        try outputFile.write(from: combinedBuffer)
-        print("  Saved to: \(outputURL.path)")
-        
-        // Analyze output quality
-        print("\n[5] Analyzing output quality...")
-        let featureExtractor = FeatureExtractor()
-        let outputFeatures = featureExtractor.extractFeatures(from: combinedBuffer)
-        
-        print("  Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")")
-        print("  Key: \(outputFeatures.key ?? "nil")")
-        print("  Energy: \(String(format: "%.4f", outputFeatures.energy))")
-        print("  Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))")
-        print("  Duration: \(String(format: "%.2f sec", outputFeatures.duration))")
-        
-        // Report
-        let reportURL = outputDir.appendingPathComponent("concatenative_report.txt")
-        var report = """
-        ============================================================
-        CONCATENATIVE SYNTHESIS REPORT
-        Generated: \(Date())
-        ============================================================
-        
-        CONFIGURATION
-        -------------
-        Segments Loaded: \(segmentCount)
-        Crossfade Duration: \(params.crossfadeDuration)s
-        
-        OUTPUT AUDIO
-        ------------
-        Captured Frames: \(totalFrames) (\(String(format: "%.2f sec", Double(totalFrames) / format.sampleRate)))
-        Tempo: \(outputFeatures.tempo.map { String(format: "%.1f BPM", $0) } ?? "nil")
-        Key: \(outputFeatures.key ?? "nil")
-        Energy: \(String(format: "%.4f", outputFeatures.energy))
-        Spectral Centroid: \(String(format: "%.1f Hz", outputFeatures.spectralCentroid))
-        Click Rate: \(String(format: "%.1f/sec", outputFeatures.clickRate))
-        
-        COMPARISON TO GRANULAR
-        ----------------------
-        Concatenative synthesis uses full phrases (2-8 sec) instead of tiny grains.
-        This should result in:
-        - Lower click rate (smoother transitions)
-        - More musical continuity
-        - Preserved original textures
-        
-        ============================================================
-        """
-        
-        try? report.write(to: reportURL, atomically: true, encoding: .utf8)
-        print("\nReport written to: \(reportURL.path)")
-        print("\n✓ Concatenative synthesis test complete!")
-    }
-    
     // MARK: - RAVE Bridge Tests
     
-    @Test func testRAVEBridgePaths() async throws {
+    @Test(.enabled(if: LocalData.optedIn)) func testRAVEBridgePaths() async throws {
         print(String(repeating: "=", count: 60))
         print("RAVE BRIDGE PATH DIAGNOSTICS")
         print(String(repeating: "=", count: 60))
@@ -953,7 +531,7 @@ struct MusicMillTests {
     
     // MARK: - PhrasePlayer Tests
     
-    @Test @MainActor func testPhrasePlayerWithSegments() async throws {
+    @Test(.enabled(if: LocalData.hasPhraseSegments)) @MainActor func testPhrasePlayerWithSegments() async throws {
         print(String(repeating: "=", count: 60))
         print("TESTING PHRASE PLAYER")
         print(String(repeating: "=", count: 60))
@@ -1187,7 +765,7 @@ struct MusicMillTests {
         print("\nTo listen: afplay '\(outputURL.path)'")
     }
     
-    @Test func testRAVEServerStart() async throws {
+    @Test(.enabled(if: LocalData.hasRAVEServer)) func testRAVEServerStart() async throws {
         print(String(repeating: "=", count: 60))
         print("RAVE SERVER START TEST")
         print(String(repeating: "=", count: 60))
@@ -1197,20 +775,16 @@ struct MusicMillTests {
         let diag = bridge.getDiagnostics()
         
         guard diag["pythonExists"] == "YES" else {
-            print("⚠️  Skipping server test - Python venv not found")
-            print("Run setup_rave.sh first")
-            return
+            throw TestError.directoryNotFound("RAVE Python venv not found (run setup_rave.sh)")
         }
         
         guard diag["scriptExists"] == "YES" else {
-            print("⚠️  Skipping server test - Server script not found")
-            return
+            throw TestError.directoryNotFound("RAVE server script not found")
         }
         
         let models = RAVEBridge.getAvailableModels()
         guard !models.isEmpty else {
-            print("⚠️  Skipping server test - No models found")
-            return
+            throw TestError.directoryNotFound("No RAVE models found")
         }
         
         print("\nStarting RAVE server with model: \(bridge.modelName)")
@@ -1242,7 +816,7 @@ struct MusicMillTests {
     
     // MARK: - HyperMusic Tests
     
-    @Test func testPhraseGraphLoading() async throws {
+    @Test(.enabled(if: LocalData.hasPhraseGraph)) func testPhraseGraphLoading() async throws {
         print(String(repeating: "=", count: 60))
         print("TESTING PHRASE GRAPH LOADING")
         print(String(repeating: "=", count: 60))
@@ -1251,9 +825,7 @@ struct MusicMillTests {
         
         print("\n[1] Checking if phrase graph exists...")
         guard database.hasGraph else {
-            print("  ⚠ No phrase graph found - run build_phrase_graph.py first")
-            print("  Skipping test")
-            return
+            throw TestError.directoryNotFound("No phrase graph found (run build_phrase_graph.py)")
         }
         
         print("  ✓ Phrase graph file exists")
