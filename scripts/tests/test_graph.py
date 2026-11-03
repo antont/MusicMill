@@ -84,3 +84,9 @@ def test_saved_graph_schema(tmp_path, small_graph):
     for n in g["nodes"]:
         assert all(0 <= b <= n["duration"] + 0.01 for b in n["downbeats"])  # phrase-relative
         assert all(0 <= b <= n["duration"] + 0.01 for b in n["beats"])
+
+
+def test_fixture_graph_exercises_several_transition_types(small_graph):
+    types = {l.suggestedTransition for p in small_graph for l in p.links if not l.isOriginalSequence}
+    # The spec asks that the non-crossfade transitions actually occur, not just exist in code.
+    assert {"eqSwap", "filter", "cut"} <= types, types
