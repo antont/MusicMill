@@ -228,6 +228,53 @@ private func dcTrack(_ value: Float, sampleRate: Double, frames: Int) -> AudioTr
         host.stop()
     }
 
+    @Test func replaceCoreFromSampleRateCallbackDuringStartRestarts() throws {
+        let hw = stubFor([m], hardwareRate: 48000)
+        let host = AudioHost(core: AudioCore(sampleRate: 44100), devices: FakeDevices([m]), engineStarting: hw.starter)
+        var rates: [Double] = []
+        host.onSampleRateChange = { rate in
+            rates.append(rate)
+            try? host.replaceCore(AudioCore(sampleRate: rate))   // what HyperSession does
+        }
+        try host.start(routing: .stereo(masterUID: "speakers"))
+        #expect(rates == [48000])
+        #expect(host.core.sampleRate == 48000)
+        #expect(host.activeRouting == .stereo(masterUID: "speakers"))
+        #expect(host.currentLayout == [.masterL, .masterR])
+        let s = hw.state.withLock { $0 }
+        #expect(s.startedRates == [44100, 48000])   // the graph runs the new core
+        #expect(s.stops == 1)
+        #expect(s.listeners == 1)
+        host.stop()
+    }
+
+    @Test func aggregateWithTooFewChannelsFallsBackToStereo() throws {
+        let hw = StubHardware { id in id == StubHardware.aggregateID ? 2 : 2 }   // cue sub-device missing
+        let host = AudioHost(core: AudioCore(sampleRate: 44100), devices: FakeDevices([m, c]),
+                             engineStarting: hw.starter)
+        var fallbacks: [OutputRouting] = []
+        host.onRoutingFallback = { fallbacks.append($0) }
+        try host.start(routing: .separate(masterUID: "speakers", cueUID: "phones"))
+        #expect(host.activeRouting == .stereo(masterUID: "speakers"))
+        #expect(fallbacks == [.stereo(masterUID: "speakers")])
+        #expect(hw.state.withLock { $0.destroyed } == [StubHardware.aggregateID])
+        host.stop()
+    }
+
+    @Test func unrelatedDeviceChangeDoesNotRebuild() throws {
+        let other = device("usb-mic", id: 12)
+        let devices = FakeDevices([m, c])
+        let hw = stubFor([m, c, other])
+        let host = AudioHost(core: AudioCore(sampleRate: 44100), devices: devices, engineStarting: hw.starter)
+        try host.start(routing: .separate(masterUID: "speakers", cueUID: "phones"))
+        devices.set([m, c, other])
+        #expect(host.deviceListNeedsRebuild() == false)
+        devices.set([m])
+        #expect(host.deviceListNeedsRebuild() == true)
+        host.stop()
+        #expect(host.deviceListNeedsRebuild() == false)
+    }
+
     @Test func replaceCoreWhileStoppedDoesNotStart() throws {
         let hw = stubFor([m])
         let host = AudioHost(core: AudioCore(sampleRate: 44100), devices: FakeDevices([m]), engineStarting: hw.starter)

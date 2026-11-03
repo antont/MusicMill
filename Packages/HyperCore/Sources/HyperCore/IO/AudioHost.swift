@@ -8,6 +8,8 @@ public enum AudioHostError: Error, Equatable {
     case setDeviceFailed(OSStatus)
     case unsupportedFormat(channels: Int)
     case engineStartFailed(String)
+    /// The aggregate device came up without the cue sub-device's outputs.
+    case aggregateMissingCueChannels(Int)
     case offlineRenderFailed
 }
 
@@ -90,7 +92,6 @@ struct EngineStarting: Sendable {
     private var requestedRouting: OutputRouting?
     private var graph: LiveGraph?
     private var deviceListToken: Cancellation?
-    private var lastDeviceUIDs: [String] = []
     private var configurationChangeScheduled = false
 
     public convenience init(core: AudioCore, devices: any DeviceProviding = SystemDevices()) {
@@ -111,8 +112,13 @@ struct EngineStarting: Sendable {
     /// (reported through `onRoutingFallback`). Throws when no device can be opened.
     public func start(routing: OutputRouting) throws {
         stop()
-        try bringUp(routing)
+        // Committed before bringUp: its callbacks may call replaceCore, which must see the
+        // host as started and rebuild with this routing.
         requestedRouting = routing
+        do { try bringUp(routing) } catch {
+            stop()
+            throw error
+        }
         let token = hardware.listenDeviceList { [weak self] in
             MainActor.assumeIsolated { self?.deviceListChanged() }
         }
@@ -154,10 +160,26 @@ struct EngineStarting: Sendable {
     // MARK: Building
 
     private func deviceListChanged() {
-        guard requestedRouting != nil else { return }
-        // Our own aggregate appearing or disappearing is filtered out by `outputDevices`, so
-        // creating it does not trigger another rebuild.
-        if devices.outputDevices().map(\.uid) != lastDeviceUIDs { scheduleConfigurationChange() }
+        if deviceListNeedsRebuild() { scheduleConfigurationChange() }
+    }
+
+    /// Whether the current device list calls for a rebuild (test-visible): the requested
+    /// routing now resolves differently, or a device it uses was replaced. Unrelated devices
+    /// coming and going (including our own aggregate, which `outputDevices` filters out) do
+    /// not interrupt playback.
+    func deviceListNeedsRebuild() -> Bool {
+        guard let requested = requestedRouting else { return false }
+        guard let graph else { return true }        // silent after a failed rebuild: retry
+        let list = devices.outputDevices()
+        let routing = resolve(requested, devices: list, defaultUID: devices.defaultOutput()?.uid)
+        return routing != activeRouting || AudioHost.deviceIDs(of: routing, in: list) != graph.deviceIDs
+    }
+
+    /// The IDs of the devices `routing` plays on, in routing order (missing ones omitted).
+    private static func deviceIDs(of routing: OutputRouting, in list: [AudioDeviceInfo]) -> [AudioDeviceID] {
+        let uids: [String]
+        if case let .separate(m, c) = routing { uids = [m, c] } else { uids = [routing.masterUID] }
+        return uids.compactMap { uid in list.first { $0.uid == uid }?.id }
     }
 
     /// Coalesces bursts of notifications (device list + engine configuration) into one rebuild.
@@ -173,7 +195,6 @@ struct EngineStarting: Sendable {
 
     private func bringUp(_ requested: OutputRouting) throws {
         let list = devices.outputDevices()
-        lastDeviceUIDs = list.map(\.uid)
         let defaultUID = devices.defaultOutput()?.uid
         var routing = resolve(requested, devices: list, defaultUID: defaultUID)
         let built: LiveGraph
@@ -201,19 +222,26 @@ struct EngineStarting: Sendable {
         }
         let master = try find(routing.masterUID)
         var aggregate: AudioDeviceID?
+        var deviceIDs = [master.id]
         if case let .separate(_, cueUID) = routing {
-            _ = try find(cueUID)
+            deviceIDs.append(try find(cueUID).id)
             aggregate = try hardware.createAggregate(master.uid, cueUID)
         }
         let engine = AVAudioEngine()
         let graph = LiveGraph(engine: engine, aggregate: aggregate, hardware: hardware)
+        graph.deviceIDs = deviceIDs
         do {
             let out = try hardware.bindDevice(engine, aggregate ?? master.id)
+            if aggregate != nil && out.channels < master.outputChannels + 2 {
+                throw AudioHostError.aggregateMissingCueChannels(out.channels)
+            }
             let layout = channelLayout(for: routing, deviceChannels: out.channels, masterChannels: master.outputChannels)
             let format = try AudioHost.renderFormat(sampleRate: core.sampleRate, channels: out.channels)
             let resources = RenderResources(core: core, layout: layout)
-            try hardware.start(engine, resources.makeSourceNode(format: format), format)
+            // Owned by the graph before the engine can render, so every teardown path stops
+            // the engine before the render block's memory is freed.
             graph.resources = resources
+            try hardware.start(engine, resources.makeSourceNode(format: format), format)
             graph.layout = layout
             graph.hardwareRate = out.sampleRate
         } catch {
@@ -261,15 +289,20 @@ struct EngineStarting: Sendable {
               let data = buffer.floatChannelData else { throw AudioHostError.offlineRenderFailed }
         var out = [[Float]](repeating: [], count: deviceChannels)
         for ch in 0..<deviceChannels { out[ch].reserveCapacity(frames) }
-        var remaining = frames
-        while remaining > 0 {
-            let n = AVAudioFrameCount(min(Int(chunk), remaining))
-            guard try engine.renderOffline(n, to: buffer) == .success else { throw AudioHostError.offlineRenderFailed }
-            let got = Int(buffer.frameLength)
-            for ch in 0..<deviceChannels {
-                out[ch].append(contentsOf: UnsafeBufferPointer(start: data[ch], count: got))
+        // The source node's block holds only a raw pointer into `resources`.
+        try withExtendedLifetime(resources) {
+            var remaining = frames
+            while remaining > 0 {
+                let n = AVAudioFrameCount(min(Int(chunk), remaining))
+                guard try engine.renderOffline(n, to: buffer) == .success else {
+                    throw AudioHostError.offlineRenderFailed
+                }
+                let got = Int(buffer.frameLength)
+                for ch in 0..<deviceChannels {
+                    out[ch].append(contentsOf: UnsafeBufferPointer(start: data[ch], count: got))
+                }
+                remaining -= got
             }
-            remaining -= got
         }
         return out
     }
@@ -289,6 +322,8 @@ private final class LiveGraph {
     let aggregate: AudioDeviceID?
     let hardware: EngineStarting
     var resources: RenderResources?
+    /// Master (and cue) device IDs this graph plays on.
+    var deviceIDs: [AudioDeviceID] = []
     var layout: [OutputSource?] = []
     var hardwareRate: Double = 0
     private var observer: NSObjectProtocol?
