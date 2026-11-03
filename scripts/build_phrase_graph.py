@@ -22,7 +22,7 @@ import os
 import re
 import subprocess
 import sys
-import uuid
+import hashlib
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -36,8 +36,7 @@ import numpy as np
 # ============================================================================
 
 # Link thresholds
-MIN_LINK_WEIGHT = 0.3  # Minimum compatibility to create a link
-MAX_LINKS_PER_PHRASE = 20  # Maximum outgoing links per phrase
+MIN_LINK_WEIGHT = 0.5  # Minimum compatibility for a cross-track link (tune against real stats)
 SEGMENT_DURATION_MIN = 4.0  # Minimum segment duration in seconds
 SEGMENT_DURATION_MAX = 60.0  # Maximum segment duration
 
@@ -364,16 +363,33 @@ def compute_link_weight(phrase1: PhraseNode, phrase2: PhraseNode) -> Tuple[float
     return weight, scores
 
 
-def suggest_transition(weight: float, energy_diff: float) -> str:
-    """Suggest best transition type based on compatibility."""
-    if weight > 0.8:
-        return "crossfade"  # Clean transition
-    elif weight > 0.6:
-        return "eqSwap"  # Use EQ for smoother blend
-    elif weight > 0.4 and abs(energy_diff) > 0.3:
-        return "filter"  # Use filter sweep for energy changes
-    else:
-        return "cut"  # Hard cut on beat for incompatible phrases
+def suggest_transition(scores: Dict, energy_diff: float) -> str:
+    """Suggest a transition type from the component scores (not the blended weight)."""
+    if scores["tempo"] < 0.5:
+        return "cut"  # Tempos too far apart to blend
+    if scores["key"] < 0.5:
+        return "filter"  # Clashing keys: hide them behind a filter sweep
+    if abs(energy_diff) > 0.25:
+        return "eqSwap"  # Big energy change: swap bands
+    return "crossfade"
+
+
+def phrase_id(track_path: str, index: int) -> str:
+    """Stable 16-char id derived from the track path and phrase index."""
+    return hashlib.sha1(f"{track_path}\x00{index}".encode()).hexdigest()[:16]
+
+
+def normalize_phrase_energies(phrases: List[PhraseNode]) -> None:
+    """Map raw RMS energies through the library's 5th-95th percentile into [0, 1].
+
+    Constant input maps to 0.5 for all phrases.
+    """
+    if not phrases:
+        return
+    raw = np.array([p.energy for p in phrases], dtype=float)
+    lo, hi = np.percentile(raw, [5, 95])
+    for p, e in zip(phrases, raw):
+        p.energy = 0.5 if hi - lo < 1e-12 else float(np.clip((e - lo) / (hi - lo), 0.0, 1.0))
 
 # ============================================================================
 # PHRASE EXTRACTION
@@ -418,14 +434,14 @@ def extract_phrases_from_analysis(analysis: dict, output_dir: Path) -> List[Phra
                 continue
             
             # Generate unique ID
-            phrase_id = str(uuid.uuid4())
+            pid = phrase_id(track_path, phrase_index)
             
             # Extract segment beats (relative to segment start)
             seg_beats = [b - start for b in beats if start <= b < end]
             seg_downbeats = [b - start for b in downbeats if start <= b < end]
             
             phrase = PhraseNode(
-                id=phrase_id,
+                id=pid,
                 sourceTrack=track_path,
                 sourceTrackName=track_name,
                 trackIndex=phrase_index,  # Sequential index within track
@@ -583,73 +599,58 @@ def extract_waveform_from_audio(y: np.ndarray, sr: int, num_points: int = 500) -
 # LINK COMPUTATION
 # ============================================================================
 
-def compute_all_links(phrases: List[PhraseNode]) -> List[PhraseNode]:
+def compute_all_links(phrases: List[PhraseNode], n_cross: int = 12, n_same: int = 2) -> List[PhraseNode]:
     """
-    Compute compatibility links between all phrase pairs.
-    
-    This is O(n²) but with early termination for obvious mismatches.
+    Link each phrase to: its original-sequence successor, the top n_same other
+    same-track phrases, and the top n_cross cross-track phrases (weight >= MIN_LINK_WEIGHT).
     """
     print(f"\nComputing links between {len(phrases)} phrases...")
-    
-    # Index by track for original sequence links
-    by_track = {}
+
+    by_track: Dict[str, List[PhraseNode]] = {}
     for phrase in phrases:
-        if phrase.sourceTrack not in by_track:
-            by_track[phrase.sourceTrack] = []
-        by_track[phrase.sourceTrack].append(phrase)
-    
-    # Sort each track's phrases by index
+        by_track.setdefault(phrase.sourceTrack, []).append(phrase)
     for track_phrases in by_track.values():
         track_phrases.sort(key=lambda p: p.trackIndex)
-    
+    next_in_track = {}
+    for track_phrases in by_track.values():
+        for cur, nxt in zip(track_phrases, track_phrases[1:]):
+            next_in_track[cur.id] = nxt.id
+
+    def make_link(p1, p2, weight, scores, is_seq):
+        return PhraseLink(
+            targetId=p2.id,
+            weight=weight,
+            isOriginalSequence=is_seq,
+            suggestedTransition=suggest_transition(scores, p2.energy - p1.energy),
+            tempoScore=scores['tempo'],
+            keyScore=scores['key'],
+            energyScore=scores['energy'],
+            spectralScore=scores['spectral'],
+        )
+
     total_links = 0
-    
-    for i, phrase1 in enumerate(phrases):
+    for i, p1 in enumerate(phrases):
         if i % 50 == 0:
             print(f"  Processing phrase {i+1}/{len(phrases)}...")
-        
-        candidate_links = []
-        
-        for phrase2 in phrases:
-            # Skip self-links
-            if phrase1.id == phrase2.id:
+        seq_id = next_in_track.get(p1.id)
+        sequence, same, cross = [], [], []
+        for p2 in phrases:
+            if p2.id == p1.id:
                 continue
-            
-            # Check if this is the original sequence (next phrase in same track)
-            is_original_seq = False
-            track_phrases = by_track.get(phrase1.sourceTrack, [])
-            for j, tp in enumerate(track_phrases):
-                if tp.id == phrase1.id and j + 1 < len(track_phrases):
-                    if track_phrases[j + 1].id == phrase2.id:
-                        is_original_seq = True
-                    break
-            
-            # Compute compatibility
-            weight, scores = compute_link_weight(phrase1, phrase2)
-            
-            # Always include original sequence, otherwise filter by weight
-            if is_original_seq or weight >= MIN_LINK_WEIGHT:
-                energy_diff = phrase2.energy - phrase1.energy
-                transition = suggest_transition(weight, energy_diff)
-                
-                link = PhraseLink(
-                    targetId=phrase2.id,
-                    weight=weight,
-                    isOriginalSequence=is_original_seq,
-                    suggestedTransition=transition,
-                    tempoScore=scores['tempo'],
-                    keyScore=scores['key'],
-                    energyScore=scores['energy'],
-                    spectralScore=scores['spectral']
-                )
-                
-                candidate_links.append(link)
-        
-        # Sort by weight (descending) and keep top N
-        candidate_links.sort(key=lambda l: (-l.isOriginalSequence, -l.weight))
-        phrase1.links = candidate_links[:MAX_LINKS_PER_PHRASE]
-        total_links += len(phrase1.links)
-    
+            weight, scores = compute_link_weight(p1, p2)
+            is_seq = p2.id == seq_id
+            link = make_link(p1, p2, weight, scores, is_seq)
+            if is_seq:
+                sequence.append(link)
+            elif p2.sourceTrack == p1.sourceTrack:
+                same.append(link)
+            elif weight >= MIN_LINK_WEIGHT:
+                cross.append(link)
+        same.sort(key=lambda l: -l.weight)
+        cross.sort(key=lambda l: -l.weight)
+        p1.links = sequence + same[:n_same] + cross[:n_cross]
+        total_links += len(p1.links)
+
     print(f"Created {total_links} links total")
     return phrases
 
@@ -698,7 +699,7 @@ def save_phrase_graph(phrases: List[PhraseNode], collection_path: str, output_fi
         nodes.append(node_dict)
     
     graph = {
-        "version": "1.1",  # Added RGB waveform data
+        "version": "2.0",  # 2.0: stable ids, normalized energy, phrase-relative beats
         "createdAt": datetime.now().astimezone().isoformat(),  # Include timezone for ISO8601 compliance
         "collectionPath": collection_path,
         "nodes": nodes
@@ -770,6 +771,8 @@ def main():
     if not args.skip_waveforms:
         generate_phrase_waveforms(phrases)
     
+    normalize_phrase_energies(phrases)
+
     # Compute links
     phrases = compute_all_links(phrases)
     
