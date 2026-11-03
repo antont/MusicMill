@@ -38,8 +38,6 @@
 - [ ] Import performance history from Rekordbox to seed transition ratings
 - [ ] Export successful transitions as Rekordbox playlists
 
-
-
 ---
 
 ## HyperCore Follow-ups (in order)

@@ -30,7 +30,7 @@ HyperMusic: Navigate your music collection as a graph of interconnected phrases.
 3. **Navigation**: Play songs normally or tap any compatible phrase to branch to a different track:
    - **Same Track Sequential**: Gapless playback within the same song
    - **Cross-Track Transition**: Switch to compatible phrases from other tracks at phrase boundaries
-   - **Beat-aligned cuts**: (Future) Immediate transitions synchronized to beats
+   - **Quantized starts**: A loaded branch starts on the next downbeat, falling back to the next phrase boundary
 
 ## Features
 
@@ -52,7 +52,7 @@ HyperMusic: Navigate your music collection as a graph of interconnected phrases.
 
 ### Known Limitations
 - DRM-protected files (Apple Music M4A) cannot be analyzed
-- Beat-aligned immediate cuts not yet implemented (phrase boundary transitions work)
+- No time-stretch or tempo sync yet; branches start quantized to the next downbeat or phrase boundary
 - DJ-style transitions (crossfade, EQ swap, filter sweep) reserved for future implementation
 
 ## Architecture
@@ -82,9 +82,9 @@ The audio render callback runs in `AudioCore` and follows strict rules: no locks
 
 ## Requirements
 
-- macOS 13.0 or later
-- Xcode 14.0 or later
-- Swift 5.9 or later
+- macOS 15.6 or later
+- Xcode 26 / Swift 6.2 (HyperCore builds in Swift 6 language mode)
+- Python 3.12 for the analysis scripts
 - M3 Mac (optimized for Apple Silicon)
 
 ## Project Structure
@@ -102,7 +102,6 @@ MusicMill/
 │   ├── build_phrase_graph.py   # Phrase graph construction (schema 2.0)
 │   ├── graph_stats.py          # Graph sanity statistics
 │   └── tests/                  # pytest suite
-├── docs/
 └── README.md
 ```
 
@@ -188,7 +187,7 @@ Each link has a total weight (0-1) and suggested transition type (crossfade, EQ 
 ## Technical Details
 
 - **Audio Analysis**: Uses librosa (Python) for tempo, key, energy, spectral analysis, and phrase detection
-- **Graph Storage**: Phrase graph stored as JSON in `~/Documents/MusicMill/Analysis/`
+- **Graph Storage**: Phrase graph stored as JSON at `~/Documents/MusicMill/PhraseGraph/phrase_graph.json` (analysis JSON lives in `~/Documents/MusicMill/Analysis/`)
 - **Playback**: AVFoundation for real-time audio playback with phrase boundary detection
 - **UI**: SwiftUI for the performance interface with Combine for reactive updates
 - **Waveforms**: RGB waveform extraction (bass/mid/high frequency bands) for DJ-style visualization
@@ -204,7 +203,7 @@ The analysis pipeline generates:
 ## Future Enhancements
 
 ### HyperMusic Improvements
-- **Beat-aligned Immediate Cuts**: Quick switch mode with beat synchronization
+- **Time-stretch and Tempo Sync**: Match tempo between decks (see FUTURE_IDEAS.md)
 - **DJ-style Transitions**: Crossfade, EQ swap, filter sweep, echo out
 - **Transition Controls**: Duration selector, transition type, manual crossfader
 - **Loop Current Phrase**: Repeat current phrase for extended mixing
