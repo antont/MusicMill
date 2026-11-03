@@ -42,3 +42,10 @@ def test_json_argument_without_u_is_not_update_mode(tmp_path, monkeypatch):
     (tmp_path / "y.json").write_text("{}")
     main([str(tmp_path / "y.json"), "-u"])
     assert calls == ["update"]
+
+
+def test_first_phrase_is_not_a_sliver_when_downbeat_slightly_after_zero(tmp_path):
+    path = write_wav(tmp_path, "c.wav", click_track(120, 40.0, accent_offset=0, first_beat=0.3))
+    seg = analyze_track(path)["segments"][0]
+    assert seg["start"] == 0.0
+    assert seg["end"] >= 2.0  # at least one bar at 120 BPM

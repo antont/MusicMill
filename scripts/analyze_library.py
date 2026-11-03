@@ -291,7 +291,8 @@ def detect_phrases_and_segments(y, sr, beat_times, downbeats, rms, rms_times) ->
     
     # The first phrase starts on the first downbeat (or at 0.0 if it is within 0.5s of it)
     first_start = 0.0 if downbeats[0] <= 0.5 else float(downbeats[0])
-    phrase_times = [first_start] + [t for t in phrase_times if t > first_start]
+    # When snapped to 0.0, downbeats[0] is no boundary: the first phrase runs on to the next one
+    phrase_times = [first_start] + [t for t in phrase_times if t > max(first_start, float(downbeats[0]))]
     
     # Add end if needed
     if phrase_times[-1] < duration - 2.0:
