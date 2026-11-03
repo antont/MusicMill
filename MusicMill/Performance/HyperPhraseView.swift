@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import CoreAudio
+import HyperCore
 
 /// HyperPhraseView - Graph navigation interface for HyperMusic
 ///

@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import Accelerate
 import CoreMedia
+import HyperCore
 
 /// Generates RGB waveform data from audio files
 /// Runs asynchronously to avoid blocking UI or audio playback

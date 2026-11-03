@@ -43,6 +43,7 @@
 		WAVEFORMPERF001BUILD000001 /* WaveformPerformanceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORMPERF001FREF000001 /* WaveformPerformanceMonitor.swift */; };
 		WAVEFORMTEST001BUILD00001 /* WaveformRenderingTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEFORMTEST001FREF00001 /* WaveformRenderingTest.swift */; };
 		WAVEGEN002BUILD00000000001 /* WaveformGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = WAVEGEN001FREF00000000001 /* WaveformGenerator.swift */; };
+		HYPERCORE0BUILDFILE00001 /* HyperCore in Frameworks */ = {isa = PBXBuildFile; productRef = HYPERCORE0PRODUCTDEP0001 /* HyperCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -123,6 +124,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				HYPERCORE0BUILDFILE00001 /* HyperCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,7 +152,6 @@
 				35AACB8C2EF704C7003DAD74 /* FeatureExtractor.swift */,
 				35AACB8D2EF704C7003DAD74 /* TrainingDataManager.swift */,
 				303738666235333938653064 /* AnalysisStorage.swift */,
-				PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */,
 				WAVEGEN001FREF00000000001 /* WaveformGenerator.swift */,
 			);
 			path = Analysis;
@@ -170,6 +171,7 @@
 			children = (
 				AUDIOROUTER01FREF000001 /* AudioRouter.swift */,
 				DECK00001FREF00000001 /* Deck.swift */,
+				PHRASEDB001001EF704C7003D /* PhraseDatabase.swift */,
 				THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */,
 			);
 			path = Legacy;
@@ -350,6 +352,7 @@
 			);
 			name = MusicMill;
 			packageProductDependencies = (
+				HYPERCORE0PRODUCTDEP0001 /* HyperCore */,
 			);
 			productName = MusicMill;
 			productReference = 35D5294A2EF6FE940048C1C9 /* MusicMill.app */;
@@ -433,6 +436,9 @@
 			);
 			mainGroup = 35D529412EF6FE930048C1C9;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				HYPERCORE0LOCALPKGREF001 /* XCLocalSwiftPackageReference "Packages/HyperCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 35D5294B2EF6FE940048C1C9 /* Products */;
 			projectDirPath = "";
@@ -859,6 +865,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		HYPERCORE0LOCALPKGREF001 /* XCLocalSwiftPackageReference "Packages/HyperCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/HyperCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		HYPERCORE0PRODUCTDEP0001 /* HyperCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HyperCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 35D529422EF6FE930048C1C9 /* Project object */;
 }

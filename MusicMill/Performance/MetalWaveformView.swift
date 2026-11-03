@@ -3,6 +3,7 @@ import MetalKit
 import QuartzCore
 import AppKit
 import AVFoundation
+import HyperCore
 
 /// Metal-based scrolling waveform view targeting 120fps on ProMotion displays
 /// Uses texture-based scrolling for efficient GPU rendering

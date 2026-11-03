@@ -3,6 +3,7 @@ import Metal
 import MetalKit
 import QuartzCore
 import CoreGraphics
+import HyperCore
 
 /// Metal renderer for RGB waveform display with texture-based scrolling
 /// Renders waveform to texture once, then scrolls texture efficiently on GPU

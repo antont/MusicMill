@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import HyperCore
 
 /// Deck identifier
 enum DeckID: String, CaseIterable {

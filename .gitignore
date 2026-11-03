@@ -108,4 +108,5 @@ iOSInjectionProject/
 *.profraw
 scripts/.venv/
 Packages/*/.build/
+Packages/*/.swiftpm/
 .superpowers/

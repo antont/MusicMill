@@ -1,4 +1,5 @@
 import SwiftUI
+import HyperCore
 
 /// DJ-style RGB waveform display
 /// Shows frequency bands: Blue = bass, Green = mids, Orange = highs

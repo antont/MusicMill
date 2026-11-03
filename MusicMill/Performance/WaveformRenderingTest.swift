@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import HyperCore
 
 /// Test harness for waveform rendering performance
 /// Runs continuous playback simulation and logs detailed metrics
