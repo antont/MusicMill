@@ -50,6 +50,43 @@ def estimate_key(chroma_mean: np.ndarray) -> str:
     return best_key
 
 
+ANALYSIS_VERSION = "2"
+LOW_BAND_HZ = 150.0
+
+
+def estimate_downbeats(beat_times: np.ndarray, strength_at_beats: np.ndarray,
+                       beats_per_bar: int = 4) -> np.ndarray:
+    """Pick the bar phase whose beats are strongest on average and return those beats.
+
+    strength_at_beats is onset strength plus low-band RMS sampled at each beat.
+    """
+    beat_times = np.asarray(beat_times, dtype=float)
+    strength_at_beats = np.asarray(strength_at_beats, dtype=float)
+    if len(beat_times) < beats_per_bar:
+        return beat_times.copy()
+    best_phase = max(
+        range(beats_per_bar),
+        key=lambda p: float(np.mean(strength_at_beats[p::beats_per_bar])),
+    )
+    return beat_times[best_phase::beats_per_bar]
+
+
+def beat_strength(y: np.ndarray, sr: int, beat_frames: np.ndarray) -> np.ndarray:
+    """Onset strength + low-band (<150 Hz) RMS at each beat frame.
+
+    Each curve is scaled to a 0..1 peak so neither dominates the sum.
+    """
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=HOP_LENGTH)
+    spec = np.abs(librosa.stft(y, n_fft=2048, hop_length=HOP_LENGTH))
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
+    low = spec[freqs < LOW_BAND_HZ]
+    low_rms = np.sqrt(np.mean(low ** 2, axis=0)) if low.size else np.zeros(spec.shape[1])
+    n = min(len(onset_env), len(low_rms))
+    combined = onset_env[:n] / (onset_env.max() + 1e-9) + low_rms[:n] / (low_rms.max() + 1e-9)
+    idx = np.clip(np.asarray(beat_frames, dtype=int), 0, n - 1)
+    return combined[idx]
+
+
 def analyze_track(audio_path: Path, verbose: bool = False) -> dict:
     """
     Analyze a single audio track for beats, phrases, and structure.
@@ -81,7 +118,7 @@ def analyze_track(audio_path: Path, verbose: bool = False) -> dict:
     if verbose:
         print(f"  Detecting beats...")
     
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LENGTH)
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=HOP_LENGTH, trim=False)  # trim=True drops weak leading beats, shifting the bar grid
     beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=HOP_LENGTH)
     
     # Handle tempo as array or scalar
@@ -94,8 +131,10 @@ def analyze_track(audio_path: Path, verbose: bool = False) -> dict:
         print(f"  Tempo: {tempo:.1f} BPM, {len(beat_times)} beats")
     
     # === Downbeats (bar boundaries) ===
-    # Assume 4/4 time signature - every 4th beat is a downbeat
-    downbeat_times = beat_times[::4].tolist() if len(beat_times) >= 4 else beat_times.tolist()
+    # Assume 4/4; choose the bar phase whose beats carry the most energy
+    strength = beat_strength(y, sr, beat_frames)
+    downbeats = estimate_downbeats(beat_times, strength)
+    downbeat_times = downbeats.tolist()
     
     # === Onset Detection ===
     if verbose:
@@ -133,7 +172,7 @@ def analyze_track(audio_path: Path, verbose: bool = False) -> dict:
     if verbose:
         print(f"  Detecting phrases and segments...")
     
-    phrases, segments = detect_phrases_and_segments(y, sr, beat_times, rms, rms_times)
+    phrases, segments = detect_phrases_and_segments(y, sr, beat_times, downbeats, rms, rms_times)
     
     if verbose:
         print(f"  Found {len(phrases)} phrase boundaries, {len(segments)} segments")
@@ -167,7 +206,7 @@ def analyze_track(audio_path: Path, verbose: bool = False) -> dict:
     }
 
 
-def detect_phrases_and_segments(y, sr, beat_times, rms, rms_times) -> tuple:
+def detect_phrases_and_segments(y, sr, beat_times, downbeats, rms, rms_times) -> tuple:
     """
     Detect phrase boundaries and classify segments.
     
@@ -182,10 +221,9 @@ def detect_phrases_and_segments(y, sr, beat_times, rms, rms_times) -> tuple:
     # Use downbeats (every 4 beats) and group into 8-bar phrases
     # 8 bars at 130 BPM = ~14.8 seconds (good phrase length)
     
-    if len(beat_times) >= 4:
-        downbeats = beat_times[::4]  # Every 4th beat = bar start
-    else:
-        downbeats = beat_times if len(beat_times) > 0 else np.array([0.0])
+    downbeats = np.asarray(downbeats, dtype=float)
+    if len(downbeats) == 0:
+        downbeats = np.array([0.0])
     
     # Choose phrase grouping based on tempo
     # Faster tempo = more bars per phrase to maintain ~10-20s segments
@@ -251,9 +289,9 @@ def detect_phrases_and_segments(y, sr, beat_times, rms, rms_times) -> tuple:
     # Sort and ensure start/end
     phrase_times = sorted(all_boundaries)
     
-    # Add start if needed
-    if len(phrase_times) == 0 or phrase_times[0] > 2.0:
-        phrase_times = [0.0] + phrase_times
+    # The first phrase starts on the first downbeat (or at 0.0 if it is within 0.5s of it)
+    first_start = 0.0 if downbeats[0] <= 0.5 else float(downbeats[0])
+    phrase_times = [first_start] + [t for t in phrase_times if t > first_start]
     
     # Add end if needed
     if phrase_times[-1] < duration - 2.0:
@@ -373,6 +411,7 @@ def analyze_directory(input_dir: Path, output_file: Path,
     
     results = {
         "version": "2.0",  # Version with beat/phrase analysis
+        "analysis_version": ANALYSIS_VERSION,
         "collectionPath": str(input_dir),
         "analyzedAt": None,  # Will be set by caller
         "tracks": []
@@ -407,8 +446,8 @@ def update_existing_analysis(existing_file: Path, verbose: bool = False) -> dict
         analysis = json.load(f)
     
     # Check if already has beat data
-    if analysis.get("version") == "2.0":
-        print("Analysis already has beat/phrase data (version 2.0)")
+    if analysis.get("analysis_version") == ANALYSIS_VERSION:
+        print(f"Analysis already has beat/phrase data (analysis_version {ANALYSIS_VERSION})")
         return analysis
     
     collection_path = Path(analysis.get("collectionPath", ""))
@@ -417,6 +456,7 @@ def update_existing_analysis(existing_file: Path, verbose: bool = False) -> dict
     print(f"Updating {len(audio_files)} tracks with beat/phrase analysis")
     
     updated_files = []
+    tracks = []
     for i, audio_info in enumerate(audio_files):
         path = audio_info.get("path", "")
         print(f"[{i+1}/{len(audio_files)}] {Path(path).name}")
@@ -441,11 +481,16 @@ def update_existing_analysis(existing_file: Path, verbose: bool = False) -> dict
             audio_info["onsets"] = track_analysis["onsets"]
             audio_info["phrases"] = track_analysis["phrases"]
             audio_info["segments"] = track_analysis["segments"]
+            # Same shape as full analysis: tempo/beats/downbeats side by side,
+            # which is what build_phrase_graph.extract_phrases_from_analysis reads.
+            tracks.append(track_analysis)
         
         updated_files.append(audio_info)
     
     analysis["audioFiles"] = updated_files
+    analysis["tracks"] = tracks
     analysis["version"] = "2.0"
+    analysis["analysis_version"] = ANALYSIS_VERSION
     
     # Save updated analysis
     backup_file = existing_file.with_suffix('.json.bak')
@@ -459,12 +504,12 @@ def update_existing_analysis(existing_file: Path, verbose: bool = False) -> dict
     return analysis
 
 
-def main():
+def main(argv: Optional[list] = None):
     parser = argparse.ArgumentParser(
         description='Analyze music library for beats, phrases, and structure using librosa'
     )
     parser.add_argument('input', type=str,
-                        help='Input directory or existing analysis.json file')
+                        help='Input directory, audio file, or (with -u) existing analysis.json file')
     parser.add_argument('-o', '--output', type=str, default=None,
                         help='Output JSON file (default: input_dir/librosa_analysis.json)')
     parser.add_argument('-u', '--update', action='store_true',
@@ -472,11 +517,11 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Verbose output')
     
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     
     input_path = Path(args.input)
     
-    if args.update or input_path.suffix == '.json':
+    if args.update:
         # Update existing analysis
         if not input_path.exists():
             print(f"Error: File not found: {input_path}")
