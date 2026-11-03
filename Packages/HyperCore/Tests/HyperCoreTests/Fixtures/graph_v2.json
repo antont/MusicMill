@@ -142,6 +142,26 @@
           "keyScore": 0.85,
           "energyScore": 0.7,
           "spectralScore": 0.6
+        },
+        {
+          "targetId": "b7e8f9a0b1c20002",
+          "weight": 0.6,
+          "isOriginalSequence": false,
+          "suggestedTransition": "crossfade",
+          "tempoScore": 0.9,
+          "keyScore": 0.8,
+          "energyScore": 0.7,
+          "spectralScore": 0.6
+        },
+        {
+          "targetId": "b7e8f9a0b1c20003",
+          "weight": 0.4,
+          "isOriginalSequence": false,
+          "suggestedTransition": "crossfade",
+          "tempoScore": 0.9,
+          "keyScore": 0.8,
+          "energyScore": 0.7,
+          "spectralScore": 0.6
         }
       ]
     },
@@ -282,6 +302,26 @@
           "suggestedTransition": "filter",
           "tempoScore": 0.95,
           "keyScore": 0.85,
+          "energyScore": 0.7,
+          "spectralScore": 0.6
+        },
+        {
+          "targetId": "b7e8f9a0b1c20001",
+          "weight": 0.5,
+          "isOriginalSequence": false,
+          "suggestedTransition": "crossfade",
+          "tempoScore": 0.9,
+          "keyScore": 0.8,
+          "energyScore": 0.7,
+          "spectralScore": 0.6
+        },
+        {
+          "targetId": "b7e8f9a0b1c20003",
+          "weight": 0.9,
+          "isOriginalSequence": false,
+          "suggestedTransition": "crossfade",
+          "tempoScore": 0.9,
+          "keyScore": 0.8,
           "energyScore": 0.7,
           "spectralScore": 0.6
         }
