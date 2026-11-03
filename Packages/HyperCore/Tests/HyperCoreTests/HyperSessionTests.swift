@@ -238,6 +238,35 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         #expect(rig.session.incoming?.deck == .b)
     }
 
+    @Test func startRefusedWhenTargetDeckIsAudible() async throws {
+        let rig = try Rig()
+        await rig.session.start(phrase: rig.phrase(a0), on: .a)   // idle deck: allowed
+        rig.run(seconds: 0.1)
+        #expect(rig.session.message == nil)
+        await rig.session.start(phrase: rig.phrase(b0), on: .b)
+        rig.run(seconds: 0.1)
+        let tokenBefore = rig.session.core.snapshot.a.trackToken
+        let posBefore = rig.session.core.snapshot.a.position
+        let callsBefore = rig.loader.calls.count
+
+        await rig.session.start(phrase: rig.phrase(b1), on: .a)   // A is live on master
+        #expect(rig.session.message != nil)
+        #expect(rig.loader.calls.count == callsBefore)
+        rig.run(seconds: 0.1)
+        let snap = rig.session.core.snapshot
+        #expect(snap.a.trackToken == tokenBefore)
+        #expect(snap.a.isPlaying)
+        #expect(snap.a.position > posBefore)
+        #expect(rig.session.decks[.a]!.currentPhrase?.id == a0)
+
+        // Pulling A's fader down makes the start allowed again.
+        rig.session.setFader(.a, 0)
+        await rig.session.start(phrase: rig.phrase(b1), on: .a)
+        rig.run(seconds: 0.1)
+        #expect(rig.session.message == nil)
+        #expect(rig.session.decks[.a]!.currentPhrase?.id == b1)
+    }
+
     @Test func quantizedStartLandsOnNextDownbeat() async throws {
         let rig = try Rig()
         await rig.session.start(phrase: rig.phrase(a0), on: .a)
@@ -434,6 +463,7 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         _ = try await cache.track(for: urlA, sampleRate: sr)
         #expect(count(urlA) == 1)                                 // still cached: pinned
 
+        session.pause(.a)                                        // a live deck refuses a new start
         await session.start(phrase: navigator.phrase(id: b0)!, on: .a)   // replaces A's track
         // Unpinning is asynchronous; once it lands, A is evictable and decodes again.
         var reDecoded = false
@@ -455,6 +485,7 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         render(rig.session.core, frames: 512)
         rig.session.tick()
         #expect(rig.loader.liveTracks.count == 1)
+        rig.session.pause(.a)                          // a live deck refuses a new start
         await rig.session.start(phrase: rig.phrase(b0), on: .a)
         render(rig.session.core, frames: 512)          // the core retires track A
         #expect(rig.loader.liveTracks.count == 2)

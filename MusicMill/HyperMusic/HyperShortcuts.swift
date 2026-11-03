@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import HyperCore
 import SwiftUI
 
@@ -91,6 +92,16 @@ struct HyperShortcutsModifier: ViewModifier {
         content
             .onAppear { install() }
             .onDisappear { remove() }
+            // Key-up never arrives once another window or app has the keyboard (⌘-Tab while
+            // holding a bend key), so held shortcuts are released when any window resigns key.
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+                releaseHeld()
+            }
+    }
+
+    private func releaseHeld() {
+        for shortcut in held.values { perform(shortcut, false) }
+        held.removeAll()
     }
 
     private func install() {
@@ -103,8 +114,7 @@ struct HyperShortcutsModifier: ViewModifier {
     private func remove() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
-        for shortcut in held.values { perform(shortcut, false) }
-        held.removeAll()
+        releaseHeld()
     }
 
     /// Returns true when the event was a HyperMusic shortcut.

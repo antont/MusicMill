@@ -1,3 +1,5 @@
+import AppKit
+import Combine
 import HyperCore
 import SwiftUI
 
@@ -159,10 +161,18 @@ private struct BendButton: View {
                         pressed = true
                         session.bend(deck, active: true, up: up)
                     }
-                    .onEnded { _ in
-                        pressed = false
-                        session.bend(deck, active: false, up: up)
-                    }
+                    .onEnded { _ in release() }
             )
+            // A drag that never ends (window lost focus, view removed) must not leave the deck bent.
+            .onDisappear { release() }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+                release()
+            }
+    }
+
+    private func release() {
+        guard pressed else { return }
+        pressed = false
+        session.bend(deck, active: false, up: up)
     }
 }

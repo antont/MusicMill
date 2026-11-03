@@ -77,10 +77,15 @@ public final class HyperSession {
 
     // MARK: Workflow
 
-    /// Loads `phrase`'s song on `d` at the phrase start and plays it.
+    /// Loads `phrase`'s song on `d` at the phrase start and plays it. Refused (message set,
+    /// nothing sent) when `d` is audible on master, like `loadBranch`.
     public func start(phrase: PhraseNode, on d: DeckID = .a) async {
+        guard !isAudible(d) else {
+            message = refusal(d)
+            return
+        }
         message = nil
-        guard await load(d, phrase: phrase) else { return }
+        guard await load(d, phrase: phrase, refuseIfAudible: true) else { return }
         play(d)
     }
 
