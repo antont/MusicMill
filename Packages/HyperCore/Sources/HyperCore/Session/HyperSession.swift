@@ -77,8 +77,9 @@ public final class HyperSession {
 
     // MARK: Workflow
 
-    /// Loads `phrase`'s song on `d` at the phrase start and plays it. Refused (message set,
-    /// nothing sent) when `d` is audible on master, like `loadBranch`.
+    /// Loads `phrase`'s song on `d` at the phrase start. Plays it when no other deck is
+    /// playing; otherwise cues it paused with PFL on (like `loadBranch`, but not `incoming`), so
+    /// it never cuts into a mix. Refused (message set, nothing sent) when `d` is audible on master.
     public func start(phrase: PhraseNode, on d: DeckID = .a) async {
         guard !isAudible(d) else {
             message = refusal(d)
@@ -86,7 +87,11 @@ public final class HyperSession {
         }
         message = nil
         guard await load(d, phrase: phrase, refuseIfAudible: true) else { return }
-        play(d)
+        if deck(Self.other(d)).isPlaying {
+            setPFL(d, true)
+        } else {
+            play(d)
+        }
     }
 
     /// Loads the branch's target phrase on the non-centre deck, paused at the phrase start with
@@ -116,7 +121,8 @@ public final class HyperSession {
 
     /// Starts `d` on the centre deck's next downbeat (or phrase boundary), sample-accurately.
     /// Falls back to the phrase end when the phrase has no downbeats, and to an immediate start
-    /// when there is no boundary ahead or no other deck is playing as the centre.
+    /// when there is no boundary ahead or no other deck is playing as the centre. A boundary less
+    /// than one render block (`core.maxFrames`) away could be missed, so the one after it is used.
     public func quantizedStart(_ d: DeckID, target: QuantizeTarget = .nextDownbeat) {
         guard deck(d).track != nil else { return }
         let snap = core.snapshot
@@ -126,19 +132,27 @@ public final class HyperSession {
         else { return startPlayback(d, at: nil) }
 
         let songNow = snap[c].position / sr
-        guard let phrase = navigator.phrase(atSongTime: songNow, inTrack: path) else {
-            return startPlayback(d, at: nil)
-        }
+        // Song seconds on the centre deck advance at its bend ratio per engine second.
+        let bend = deck(c).bendRatio
+        let earliest = songNow + Double(core.maxFrames) / sr * bend
+        var phrase = navigator.phrase(atSongTime: songNow, inTrack: path)
         var targetTime: TimeInterval?
-        if target == .nextDownbeat {
-            targetTime = phrase.downbeats.lazy.map { phrase.songTime(ofPhraseRelative: $0) }.first { $0 > songNow }
-        }
-        if targetTime == nil, let end = phrase.endTime, end > songNow {
-            targetTime = end
+        // The boundary may fall in the next phrase when the current one ends within a block.
+        for _ in 0..<2 {
+            guard let p = phrase else { break }
+            if target == .nextDownbeat {
+                targetTime = p.downbeats.lazy.map { p.songTime(ofPhraseRelative: $0) }.first { $0 > earliest }
+            }
+            if targetTime == nil, let end = p.endTime, end > earliest {
+                targetTime = end
+            }
+            if targetTime != nil { break }
+            phrase = p.endTime.flatMap { end in
+                navigator.phrase(atSongTime: end, inTrack: path).flatMap { $0.id == p.id ? nil : $0 }
+            }
         }
         guard let targetTime else { return startPlayback(d, at: nil) }
-        // Song seconds on the centre deck advance at its bend ratio per engine second.
-        let frames = ((targetTime - songNow) / deck(c).bendRatio * sr).rounded()
+        let frames = ((targetTime - songNow) / bend * sr).rounded()
         startPlayback(d, at: snap.sampleTime + Int64(frames))
     }
 
@@ -163,12 +177,16 @@ public final class HyperSession {
             message = "Nothing to loop on deck \(Self.name(d))."
             return
         }
-        let sr = core.sampleRate
+        guard let range = loopRange(phrase, sampleRate: core.sampleRate) else { return }
+        if send(.loop(d, range)) { deck.loopEnabled = true }
+    }
+
+    /// `phrase` in engine frames at `sr`; nil when empty.
+    private func loopRange(_ phrase: PhraseNode, sampleRate sr: Double) -> Range<Int>? {
         let lower = phrase.startFrame(sampleRate: sr)
         let end = phrase.endTime ?? ((phrase.startTime ?? 0) + phrase.duration)
         let upper = Int((end * sr).rounded())
-        guard upper > lower else { return }
-        if send(.loop(d, lower..<upper)) { deck.loopEnabled = true }
+        return upper > lower ? lower..<upper : nil
     }
 
     // MARK: Mixer
@@ -252,61 +270,92 @@ public final class HyperSession {
 
     // MARK: Sample-rate recovery
 
-    /// Rebuilds the engine at `sr`: a new `AudioCore` with every mixer control re-sent, loaded
-    /// tracks re-decoded at `sr` and restored at the same position in seconds, with their play,
-    /// loop and bend state. The caller then hands `core` to the audio host.
+    /// Rebuilds the engine at `sr`. Until the swap the old core stays `core`: the host keeps
+    /// rendering it, `tick` follows it and controls go to it, while every loaded track is
+    /// re-decoded at `sr` (including tracks loaded meanwhile). Then, in one synchronous step,
+    /// a new core is built, each deck is loaded at the old core's position at that instant with
+    /// its play, scheduled-start, loop and bend state, every mixer control is sent, and `core`
+    /// is swapped. The caller must hand `core` to the audio host straight after this returns.
     public func engineSampleRateChanged(to sr: Double) async {
         guard sr > 0, sr != core.sampleRate else { return }
         let old = core
-        let snap = old.snapshot
+        let loader = self.loader
+        var decoded: [URL: Result<AudioTrack, any Error>] = [:]
+        while true {
+            let needed = Set(DeckID.allCases.compactMap { deck($0).track }).subtracting(decoded.keys)
+            if needed.isEmpty { break }
+            let results = await withTaskGroup(of: (URL, Result<AudioTrack, any Error>).self) { group in
+                for url in needed {
+                    group.addTask {
+                        do { return (url, .success(try await loader.track(for: url, sampleRate: sr))) }
+                        catch { return (url, .failure(error)) }
+                    }
+                }
+                var all: [(URL, Result<AudioTrack, any Error>)] = []
+                for await r in group { all.append(r) }
+                return all
+            }
+            for (url, result) in results { decoded[url] = result }
+        }
+        guard core === old else { return }      // another rebuild swapped meanwhile
+        swapCore(from: old, to: AudioCore(sampleRate: sr, maxFrames: old.maxFrames), tracks: decoded)
+    }
 
-        var restores: [Restore] = []
+    /// Moves every deck and control from `old` to `new` and makes `new` the core. Synchronous,
+    /// so `old` cannot advance (on this actor's view) between reading positions and the swap.
+    private func swapCore(from old: AudioCore, to new: AudioCore, tracks: [URL: Result<AudioTrack, any Error>]) {
+        let snap = old.snapshot
+        let ratio = new.sampleRate / old.sampleRate
+        old.drainReleasedTracks()               // the old core releases the rest in its deinit
+        core = new
+        sendMixerState()
         for d in DeckID.allCases {
             let deck = deck(d)
-            guard deck.loadState != .loading else {
-                // The in-flight load notices the new rate, re-decodes and loads the new core.
-                clearTrack(deck)
+            guard let url = deck.track, let result = tracks[url] else { continue }
+            let track: AudioTrack
+            switch result {
+            case .success(let t): track = t
+            case .failure(let error):
+                dropTrack(deck, reason: Self.describe(error))
                 continue
             }
-            guard let url = deck.track, let path = deck.trackPath else { continue }
-            let seconds = snap.sampleTime > deck.commandSentAt ? snap[d].position / old.sampleRate
-                                                               : deck.positionSeconds
-            restores.append(Restore(deck: d, url: url, path: path, seconds: seconds, playing: deck.isPlaying,
-                                    loop: deck.loopEnabled, bend: deck.bendRatio))
-            deck.positionSeconds = seconds
-            deck.commandSentAt = .max      // tick leaves the deck alone until it is reloaded
-        }
-
-        old.drainReleasedTracks()          // the old core releases the rest in its deinit
-        core = AudioCore(sampleRate: sr, maxFrames: old.maxFrames)
-        sendMixerState()
-
-        await withDiscardingTaskGroup { group in
-            for r in restores {
-                group.addTask { await self.restore(r) }
+            // Snapshot values are only trusted once the old core rendered the last command.
+            let reflected = snap.sampleTime > deck.commandSentAt
+            let seconds = reflected ? snap[d].position / old.sampleRate : deck.positionSeconds
+            let startFrame = Int((seconds * new.sampleRate).rounded())
+            let retained = Unmanaged.passRetained(track)
+            guard new.send(.load(d, retained, startFrame: startFrame)) else {
+                retained.release()
+                dropTrack(deck, reason: "Audio engine busy")
+                continue
+            }
+            deck.positionSeconds = Double(startFrame) / new.sampleRate
+            deck.commandSentAt = new.snapshot.sampleTime
+            updatePhrase(deck)
+            if deck.loopEnabled, let phrase = deck.currentPhrase, let range = loopRange(phrase, sampleRate: new.sampleRate) {
+                send(.loop(d, range))
+            } else {
+                send(.loop(d, nil))
+                deck.loopEnabled = false
+            }
+            send(.bend(d, deck.bendRatio))
+            guard deck.isPlaying else { continue }
+            let scheduled = snap[d].scheduledStart
+            if reflected, scheduled > snap.sampleTime {
+                send(.play(d, at: Int64((Double(scheduled - snap.sampleTime) * ratio).rounded())))
+            } else {
+                send(.play(d, at: nil))
             }
         }
     }
 
-    private struct Restore: Sendable {
-        let deck: DeckID
-        let url: URL
-        let path: String
-        let seconds: Double
-        let playing: Bool
-        let loop: Bool
-        let bend: Double
-    }
-
-    private func restore(_ r: Restore) async {
-        let deck = deck(r.deck)
-        guard await load(r.deck, url: r.url, trackPath: r.path, at: r.seconds, keepsIncoming: true) else {
-            if deck.commandSentAt == .max { deck.commandSentAt = -1 }
-            return
-        }
-        if r.loop { toggleLoop(r.deck) }
-        if r.bend != 1, send(.bend(r.deck, r.bend)) { deck.bendRatio = r.bend }
-        if r.playing { play(r.deck) }
+    /// Empties a deck whose track could not be moved to a new core, with a load error.
+    private func dropTrack(_ deck: DeckModel, reason: String) {
+        if let url = deck.pinnedURL { unpin(url) }
+        deck.pinnedURL = nil
+        clearTrack(deck)
+        deck.loadState = .failed(reason)
+        message = "Deck \(Self.name(deck.id)) could not be reloaded at the new sample rate: \(reason)"
     }
 
     private func sendMixerState() {
@@ -337,11 +386,11 @@ public final class HyperSession {
     /// a completion whose generation is no longer current is discarded. Returns true when the
     /// `.load` reached the engine.
     private func load(_ d: DeckID, url: URL, trackPath: String, at seconds: Double,
-                      refuseIfAudible: Bool = false, keepsIncoming: Bool = false) async -> Bool {
+                      refuseIfAudible: Bool = false) async -> Bool {
         let deck = deck(d)
         deck.loadGeneration &+= 1
         let generation = deck.loadGeneration
-        if !keepsIncoming, incoming?.deck == d { incoming = nil }
+        if incoming?.deck == d { incoming = nil }
         let stateBefore = deck.loadState
         deck.loadState = .loading
 
@@ -439,7 +488,9 @@ public final class HyperSession {
         incoming = nil
         lastTransition = pending.branch
         do {
-            try feedback?.logPlayed(from: pending.branch.from.id, to: pending.branch.to.id, source: .performance)
+            let source: RelationshipDatabase.EventSource =
+                feedback?.currentSession?.type == .practice ? .practice : .performance
+            try feedback?.logPlayed(from: pending.branch.from.id, to: pending.branch.to.id, source: source)
         } catch {
             message = "Could not log transition: \(error.localizedDescription)"
         }

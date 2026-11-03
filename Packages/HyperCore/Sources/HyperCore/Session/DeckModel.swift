@@ -44,7 +44,6 @@ public final class DeckModel {
     /// Engine sample time when the last state-changing command for this deck was sent.
     /// Snapshot playback state is only trusted once the engine has rendered past it, so a
     /// command not yet applied is not overwritten by stale snapshot values.
-    /// `Int64.max` while the deck is being restored on a new core.
     @ObservationIgnored var commandSentAt: Int64 = -1
     /// Varispeed ratio in force (1 when no bend is held).
     @ObservationIgnored var bendRatio: Double = 1

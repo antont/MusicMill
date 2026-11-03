@@ -102,6 +102,7 @@ final class AppAudio {
     }
 
     /// Loads a random phrase on the deck that is not the centre (deck A before anything plays).
+    /// It plays only when nothing else is playing; otherwise it is cued paused with PFL on.
     func randomStart() async {
         guard let phrase = navigator?.randomStart() else { return }
         let deck: HyperDeckID = session.centre.map { $0 == .a ? .b : .a } ?? .a

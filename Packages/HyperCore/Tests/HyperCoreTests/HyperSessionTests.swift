@@ -219,7 +219,8 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         await rig.session.start(phrase: rig.phrase(a0), on: .a)
         rig.run(seconds: 0.1)
         #expect(rig.session.centre == .a)
-        await rig.session.start(phrase: rig.phrase(b0), on: .b)   // B plays, crossfader centred
+        await rig.session.start(phrase: rig.phrase(b0), on: .b)   // cued: A is playing
+        rig.session.play(.b)                                       // B plays, crossfader centred
         rig.run(seconds: 0.1)
         #expect(rig.session.centre == .a)
         let callsBefore = rig.loader.calls.count
@@ -238,12 +239,36 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         #expect(rig.session.incoming?.deck == .b)
     }
 
+    @Test func startWhileAnotherDeckPlaysCuesPausedWithPFL() async throws {
+        let rig = try Rig()
+        await rig.session.start(phrase: rig.phrase(a0), on: .a)
+        rig.run(seconds: 0.5)
+        #expect(rig.session.centre == .a)
+        // Random Start targets the non-centre deck; with A playing it must not cut into master.
+        await rig.session.start(phrase: rig.phrase(b1), on: .b)
+        rig.run(seconds: 0.5)
+        let deck = rig.session.decks[.b]!
+        #expect(deck.track == URL(fileURLWithPath: trackB))
+        #expect(deck.loadState == .ready)
+        #expect(deck.isPlaying == false)
+        #expect(deck.pfl)
+        #expect(deck.currentPhrase?.id == b1)
+        #expect(rig.session.incoming == nil)              // no branch: nothing to log on handover
+        let snap = rig.session.core.snapshot
+        #expect(snap.b.isPlaying == false)
+        #expect(snap.b.position == Double(rig.phrase(b1).startFrame(sampleRate: sr)))
+        #expect(snap.a.isPlaying)
+        #expect(rig.session.centre == .a)
+        #expect(rig.session.message == nil)
+    }
+
     @Test func startRefusedWhenTargetDeckIsAudible() async throws {
         let rig = try Rig()
         await rig.session.start(phrase: rig.phrase(a0), on: .a)   // idle deck: allowed
         rig.run(seconds: 0.1)
         #expect(rig.session.message == nil)
         await rig.session.start(phrase: rig.phrase(b0), on: .b)
+        rig.session.play(.b)
         rig.run(seconds: 0.1)
         let tokenBefore = rig.session.core.snapshot.a.trackToken
         let posBefore = rig.session.core.snapshot.a.position
@@ -289,6 +314,38 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         rig2.session.quantizedStart(.b, target: .nextPhraseBoundary)
         render(rig2.session.core, frames: 64)
         #expect(abs(rig2.session.core.snapshot.b.scheduledStart - Int64(30 * sr)) <= 1)
+    }
+
+    @Test func quantizedStartSkipsBoundaryCloserThanOneBlock() async throws {
+        // The next downbeat (1.875 s = frame 82688) is under one render block away.
+        let rig = try Rig()
+        await rig.session.start(phrase: rig.phrase(a0), on: .a)
+        rig.run(seconds: 1.8227, block: 512)
+        let lead = Int64((1.875 * sr).rounded()) - rig.session.core.snapshot.sampleTime
+        #expect(lead > 0 && lead < Int64(rig.session.core.maxFrames))
+        await rig.session.loadBranch(try #require(rig.session.branches.first))
+        rig.session.quantizedStart(.b)
+        render(rig.session.core, frames: 64)
+        #expect(abs(rig.session.core.snapshot.b.scheduledStart - Int64((3.75 * sr).rounded())) <= 1)
+
+        // The phrase end (30 s) is under one block away: the following phrase's end (60 s).
+        let rig2 = try Rig()
+        await rig2.session.start(phrase: rig2.phrase(a0), on: .a)
+        rig2.run(seconds: 29.97, block: 512)
+        #expect(rig2.session.centreDeck?.currentPhrase?.id == a0)
+        await rig2.session.loadBranch(try #require(rig2.session.branches.first))
+        rig2.session.quantizedStart(.b, target: .nextPhraseBoundary)
+        render(rig2.session.core, frames: 64)
+        #expect(abs(rig2.session.core.snapshot.b.scheduledStart - Int64(60 * sr)) <= 1)
+
+        // .nextDownbeat there: the phrase end is too close, so the next phrase's second downbeat.
+        let rig3 = try Rig()
+        await rig3.session.start(phrase: rig3.phrase(a0), on: .a)
+        rig3.run(seconds: 29.97, block: 512)
+        await rig3.session.loadBranch(try #require(rig3.session.branches.first))
+        rig3.session.quantizedStart(.b)
+        render(rig3.session.core, frames: 64)
+        #expect(abs(rig3.session.core.snapshot.b.scheduledStart - Int64((31.875 * sr).rounded())) <= 1)
     }
 
     @Test func quantizedStartWithoutDownbeatsFallsBack() async throws {
@@ -360,6 +417,23 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         #expect(try db.getFeedback(from: a0, to: branch.to.id).performanceCount == 1)
     }
 
+    @Test func handoverInPracticeSessionLogsPracticeSource() async throws {
+        let rig = try Rig(withDB: true)
+        let db = try #require(rig.db)
+        _ = try db.startSession(type: .practice)
+        await rig.session.start(phrase: rig.phrase(a0), on: .a)
+        rig.run(seconds: 0.5)
+        let branch = try #require(rig.session.branches.first)
+        await rig.session.loadBranch(branch)
+        rig.session.play(.b)
+        rig.session.crossfader = 1
+        rig.run(seconds: 1.5)
+        #expect(rig.session.lastTransition?.id == branch.id)
+        let fb = try db.getFeedback(from: a0, to: branch.to.id)
+        #expect(fb.practiceCount == 1)
+        #expect(fb.performanceCount == 0)
+    }
+
     @Test func abandonedLoadIsNotLogged() async throws {
         let rig = try Rig(withDB: true)
         let db = try #require(rig.db)
@@ -371,6 +445,7 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         // Reloading the incoming deck abandons the branch without logging.
         await rig.session.start(phrase: rig.phrase(b1), on: .b)
         #expect(rig.session.incoming == nil)
+        rig.session.play(.b)
         rig.session.crossfader = 1
         rig.run(seconds: 1.5)
         #expect(rig.session.centre == .b)
@@ -445,6 +520,86 @@ private func node(_ id: String, track: String, index: Int, start: Double, end: D
         #expect(deck.currentPhrase?.id == a1)
         #expect(deck.eq.low == -20)
         #expect(session.crossfader == 0.3)
+    }
+
+    @Test func sampleRateChangeKeepsOldCoreLiveUntilSwap() async throws {
+        let loader = FakeLoader(autoComplete: false)
+        let rig = try Rig(loader: loader)
+        let session = rig.session
+        let urlA = URL(fileURLWithPath: trackA)
+        let starting = Task { await session.start(phrase: rig.phrase(a1), on: .a) }
+        await waitUntil { loader.pendingCount == 1 }
+        loader.complete(urlA)
+        await starting.value
+        rig.run(seconds: 2.3)
+        let oldCore = session.core
+
+        let rebuild = Task { await session.engineSampleRateChanged(to: 48000) }
+        await waitUntil { loader.pendingCount == 1 }
+        #expect(loader.calls.last == FakeLoader.Call(url: urlA, sampleRate: 48000))
+        // The host keeps rendering the old core during the re-decode; the display follows it.
+        #expect(session.core === oldCore)
+        let before = session.decks[.a]!.positionSeconds
+        rig.run(seconds: 0.5)
+        #expect(session.core === oldCore)
+        #expect(abs(session.decks[.a]!.positionSeconds - (before + 0.5)) < 0.01)
+        // Control changes made now go to the old core, never filling the new core's ring.
+        for i in 0..<300 { session.crossfader = i.isMultiple(of: 2) ? 0.2 : 0.4 }
+
+        loader.complete(urlA)
+        await rebuild.value
+        #expect(session.core !== oldCore)
+        #expect(session.core.sampleRate == 48000)
+        // The old core has not rendered since: its position is the one at swap time.
+        let swapSeconds = oldCore.snapshot.a.position / oldCore.sampleRate
+        let deck = session.decks[.a]!
+        #expect(deck.loadState == .ready)
+        #expect(abs(deck.positionSeconds - swapSeconds) < 0.001)
+        render(session.core, frames: 48)               // 1 ms at the new rate
+        session.tick()
+        #expect(deck.isPlaying)
+        #expect(abs(session.core.snapshot.a.position / 48000 - (swapSeconds + 0.001)) < 0.001)
+        #expect(abs(deck.positionSeconds - (swapSeconds + 0.001)) < 0.001)
+        #expect(session.crossfader == 0.4)
+    }
+
+    @Test func trackLoadedDuringSampleRateChangeIsRedecodedBeforeSwap() async throws {
+        let loader = FakeLoader(autoComplete: false)
+        let rig = try Rig(loader: loader)
+        let session = rig.session
+        let urlA = URL(fileURLWithPath: trackA), urlB = URL(fileURLWithPath: trackB)
+        let starting = Task { await session.start(phrase: rig.phrase(a0), on: .a) }
+        await waitUntil { loader.pendingCount == 1 }
+        loader.complete(urlA)
+        await starting.value
+        rig.run(seconds: 0.5)
+        let oldCore = session.core
+
+        let rebuild = Task { await session.engineSampleRateChanged(to: 48000) }
+        await waitUntil { loader.pendingCount == 1 }
+        let loadingB = Task { await session.start(phrase: rig.phrase(b0), on: .b) }
+        await waitUntil { loader.pendingCount == 2 }
+        // Loads meanwhile target the old core, still rendering at the old rate.
+        #expect(loader.calls.last == FakeLoader.Call(url: urlB, sampleRate: sr))
+        loader.complete(urlB)
+        await loadingB.value
+        #expect(session.decks[.b]!.loadState == .ready)
+        loader.complete(urlA)
+        await waitUntil { loader.pendingCount == 1 }
+        #expect(loader.calls.last == FakeLoader.Call(url: urlB, sampleRate: 48000))
+        #expect(session.core === oldCore)
+        loader.complete(urlB)
+        await rebuild.value
+        #expect(session.core !== oldCore)
+        render(session.core, frames: 48)
+        session.tick()
+        let snap = session.core.snapshot
+        #expect(snap.a.trackToken != 0)
+        #expect(snap.b.trackToken != 0)
+        #expect(snap.a.isPlaying)
+        #expect(snap.b.isPlaying == false)
+        #expect(session.decks[.b]!.pfl)
+        #expect(session.decks[.b]!.currentPhrase?.id == b0)
     }
 
     @Test func deckTrackIsPinnedInCacheUntilReplaced() async throws {
