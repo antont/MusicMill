@@ -208,9 +208,12 @@ public final class RelationshipDatabase: ObservableObject {
         /// Played/rated events from other sources (manual, import).
         public var otherCount: Int = 0
         public var totalCount: Int { practiceCount + performanceCount + otherCount }
+        /// Events carrying a rating (any source).
+        public var ratedCount: Int = 0
         public var averageRating: Double = 0
         public var lastUsed: Date?
-        public var confidence: Double { min(1.0, Double(totalCount) / 10.0) }
+        /// Trust in `averageRating`: grows with rated events only, so plays alone stay neutral.
+        public var confidence: Double { min(1.0, Double(ratedCount) / 10.0) }
     }
     
     // MARK: - Properties
@@ -662,7 +665,7 @@ public final class RelationshipDatabase: ObservableObject {
         
         // Count played and rated events, from any source
         let countSql = """
-        SELECT source, COUNT(*) FROM transition_events 
+        SELECT source, COUNT(*), SUM(rating IS NOT NULL) FROM transition_events 
         WHERE from_phrase = ? AND to_phrase = ? AND action IN ('played','rated')
         GROUP BY source
         """
@@ -679,6 +682,7 @@ public final class RelationshipDatabase: ObservableObject {
         while sqlite3_step(stmt) == SQLITE_ROW {
             let source = String(cString: sqlite3_column_text(stmt, 0))
             let count = Int(sqlite3_column_int(stmt, 1))
+            feedback.ratedCount += Int(sqlite3_column_int(stmt, 2))
             
             if source == EventSource.practice.rawValue {
                 feedback.practiceCount = count
@@ -749,9 +753,10 @@ public final class RelationshipDatabase: ObservableObject {
     public func adjustedWeight(baseWeight: Double, from: String, to: String) throws -> Double {
         let feedback = try getFeedback(from: from, to: to)
         
-        guard feedback.totalCount > 0 else { return baseWeight }
+        // Only ratings move the weight: following a transition is not a judgement of it.
+        guard feedback.ratedCount > 0 else { return baseWeight }
         
-        // More events = higher confidence in user feedback
+        // More ratings = higher confidence in user feedback
         let confidence = feedback.confidence
         
         // Convert rating (-1 to +1) to weight (0 to 1)

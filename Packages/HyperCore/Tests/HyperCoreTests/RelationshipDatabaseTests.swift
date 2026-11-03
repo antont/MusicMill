@@ -28,6 +28,14 @@ struct RelationshipDatabaseTests {
         #expect(try db.adjustedWeight(baseWeight: 0.5, from: "a", to: "b") < 0.5)
     }
 
+    @Test func playsAloneLeaveWeightUnchanged() throws {
+        for _ in 0..<5 { try db.logPlayed(from: "a", to: "b", source: .performance) }
+        #expect(try db.adjustedWeight(baseWeight: 0.8, from: "a", to: "b") == 0.8)
+        // One rating: confidence 0.1 from rated events only, so 0.8 * 0.95 + 1 * 0.05.
+        try db.logRating(from: "a", to: "b", rating: 1)
+        #expect(abs(try db.adjustedWeight(baseWeight: 0.8, from: "a", to: "b") - 0.81) < 1e-9)
+    }
+
     @Test func playedEventsArePersistedAcrossReopen() throws {
         try db.logPlayed(from: "a", to: "b", source: .practice)
         db.close()
