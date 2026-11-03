@@ -35,7 +35,6 @@
 		RAVE0002BUILD00000000001 /* RAVESynthesizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */; };
 		RAVEB002BUILD00000000001 /* RAVEBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEB001BRIDG00000000001 /* RAVEBridge.swift */; };
 		RAVEVIEW002BUILD00000000001 /* RAVEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RAVEVIEW001FREF00000000001 /* RAVEView.swift */; };
-		RELDB001BUILD00000000001 /* RelationshipDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = RELDB001FREF00000000001 /* RelationshipDatabase.swift */; };
 		SHADERS001BUILD00000001 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = SHADERS001FREF00000001 /* Shaders.metal */; };
 		THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */ = {isa = PBXBuildFile; fileRef = THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */; };
 		TRANS001BUILD00000000001 /* TransitionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = TRANS001FREF00000000001 /* TransitionEngine.swift */; };
@@ -96,7 +95,6 @@
 		RAVE0001SYNTH00000000001 /* RAVESynthesizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVESynthesizer.swift; sourceTree = "<group>"; };
 		RAVEB001BRIDG00000000001 /* RAVEBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEBridge.swift; sourceTree = "<group>"; };
 		RAVEVIEW001FREF00000000001 /* RAVEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RAVEView.swift; sourceTree = "<group>"; };
-		RELDB001FREF00000000001 /* RelationshipDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationshipDatabase.swift; sourceTree = "<group>"; };
 		SHADERS001FREF00000001 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		THREEBANDEQ01FREF0001 /* ThreeBandEQ.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreeBandEQ.swift; sourceTree = "<group>"; };
 		TRANS001FREF00000000001 /* TransitionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionEngine.swift; sourceTree = "<group>"; };
@@ -265,7 +263,6 @@
 				35AACB8E2EF704C7003DAD74 /* Analysis */,
 				35AACB912EF704C7003DAD74 /* App */,
 				35AACB932EF704C7003DAD74 /* Legacy */,
-				DATA001GRP000000000001 /* Data */,
 				35AACB9A2EF704C7003DAD74 /* DerivedData */,
 				35AACB9E2EF704C7003DAD74 /* ML */,
 				35AACBA42EF704C7003DAD74 /* Performance */,
@@ -317,14 +314,6 @@
 				RAVEB001BRIDG00000000001 /* RAVEBridge.swift */,
 			);
 			path = Generation;
-			sourceTree = "<group>";
-		};
-		DATA001GRP000000000001 /* Data */ = {
-			isa = PBXGroup;
-			children = (
-				RELDB001FREF00000000001 /* RelationshipDatabase.swift */,
-			);
-			path = Data;
 			sourceTree = "<group>";
 		};
 		VIEWS001GRP000000000001 /* Views */ = {
@@ -517,7 +506,6 @@
 				SHADERS001BUILD00000001 /* Shaders.metal in Sources */,
 				A8630BBED11D232C107E7A7F /* SampleLibrary.swift in Sources */,
 				8D65E7A78B030C92972194C8 /* SynthesisEngine.swift in Sources */,
-				RELDB001BUILD00000000001 /* RelationshipDatabase.swift in Sources */,
 				AUDIOROUTER01BUILD000001 /* AudioRouter.swift in Sources */,
 				DECK00001BUILD00000001 /* Deck.swift in Sources */,
 				THREEBANDEQ01BUILD0001 /* ThreeBandEQ.swift in Sources */,

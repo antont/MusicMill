@@ -4,17 +4,18 @@ import SQLite3
 
 /// SQLite database for storing user feedback on transitions and phrase tags.
 /// Event-sourced design: all events are stored, statistics computed from history.
-class RelationshipDatabase: ObservableObject {
+@MainActor
+public final class RelationshipDatabase: ObservableObject {
     
     // MARK: - Types
     
-    enum DatabaseError: Error, LocalizedError {
+    public enum DatabaseError: Error, LocalizedError, Sendable {
         case openFailed(String)
         case prepareFailed(String)
         case executeFailed(String)
         case bindFailed(String)
         
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .openFailed(let msg): return "Failed to open database: \(msg)"
             case .prepareFailed(let msg): return "Failed to prepare statement: \(msg)"
@@ -25,7 +26,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Transition technique types
-    enum TransitionTechnique: String, Codable, CaseIterable {
+    public enum TransitionTechnique: String, Codable, CaseIterable, Sendable {
         case bassSwap = "bass_swap"
         case filterSweep = "filter_sweep"
         case hardCut = "hard_cut"
@@ -34,7 +35,7 @@ class RelationshipDatabase: ObservableObject {
         case echo = "echo"
         case custom = "custom"
         
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .bassSwap: return "Bass Swap"
             case .filterSweep: return "Filter Sweep"
@@ -48,7 +49,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Event sources
-    enum EventSource: String, Codable {
+    public enum EventSource: String, Codable, Sendable {
         case practice = "practice"
         case performance = "performance"
         case manual = "manual"
@@ -56,7 +57,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Event actions
-    enum EventAction: String, Codable {
+    public enum EventAction: String, Codable, Sendable {
         case played = "played"
         case rated = "rated"
         case skipped = "skipped"
@@ -64,19 +65,19 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Session types
-    enum SessionType: String, Codable {
+    public enum SessionType: String, Codable, Sendable {
         case practice = "practice"
         case performance = "performance"
     }
     
     /// Rhythm styles
-    enum RhythmStyle: String, Codable, CaseIterable {
+    public enum RhythmStyle: String, Codable, CaseIterable, Sendable {
         case even = "even"          // 4/4 straight
         case broken = "broken"      // breakbeat, IDM
         case swung = "swung"        // shuffle, swing
         case halftime = "halftime"
         
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .even: return "Even (4/4)"
             case .broken: return "Broken"
@@ -89,102 +90,163 @@ class RelationshipDatabase: ObservableObject {
     // MARK: - Data Models
     
     /// User-authored transition metadata
-    struct Transition: Codable, Identifiable {
-        var id: String { "\(fromPhraseId)→\(toPhraseId)" }
-        let fromPhraseId: String
-        let toPhraseId: String
-        var notes: String?
-        var technique: TransitionTechnique?
-        var suggestedBars: Int?
-        var qualityRating: Int?  // -2 to +2
-        var tags: [String]
-        var properties: [String: String]  // Extensible
-        var createdAt: Date
-        var updatedAt: Date
+    public struct Transition: Codable, Identifiable, Sendable {
+        public var id: String { "\(fromPhraseId)→\(toPhraseId)" }
+        public let fromPhraseId: String
+        public let toPhraseId: String
+        public var notes: String?
+        public var technique: TransitionTechnique?
+        public var suggestedBars: Int?
+        public var qualityRating: Int?  // -2 to +2
+        public var tags: [String]
+        public var properties: [String: String]  // Extensible
+        public var createdAt: Date
+        public var updatedAt: Date
+        
+        public init(fromPhraseId: String, toPhraseId: String, notes: String? = nil,
+                    technique: TransitionTechnique? = nil, suggestedBars: Int? = nil,
+                    qualityRating: Int? = nil, tags: [String] = [],
+                    properties: [String: String] = [:],
+                    createdAt: Date = Date(), updatedAt: Date = Date()) {
+            self.fromPhraseId = fromPhraseId
+            self.toPhraseId = toPhraseId
+            self.notes = notes
+            self.technique = technique
+            self.suggestedBars = suggestedBars
+            self.qualityRating = qualityRating
+            self.tags = tags
+            self.properties = properties
+            self.createdAt = createdAt
+            self.updatedAt = updatedAt
+        }
     }
     
     /// Single transition event
-    struct TransitionEvent: Codable, Identifiable {
-        let id: String
-        let fromPhraseId: String
-        let toPhraseId: String
-        let timestamp: Date
-        let source: EventSource
-        let action: EventAction
-        var rating: Int?  // -1, 0, +1
-        var context: EventContext?
-        var sessionId: String?
-        var comment: String?
+    public struct TransitionEvent: Codable, Identifiable, Sendable {
+        public let id: String
+        public let fromPhraseId: String
+        public let toPhraseId: String
+        public let timestamp: Date
+        public let source: EventSource
+        public let action: EventAction
+        public var rating: Int?  // -1, 0, +1
+        public var context: EventContext?
+        public var sessionId: String?
+        public var comment: String?
+        
+        public init(id: String = UUID().uuidString, fromPhraseId: String, toPhraseId: String,
+                    timestamp: Date = Date(), source: EventSource, action: EventAction,
+                    rating: Int? = nil, context: EventContext? = nil,
+                    sessionId: String? = nil, comment: String? = nil) {
+            self.id = id
+            self.fromPhraseId = fromPhraseId
+            self.toPhraseId = toPhraseId
+            self.timestamp = timestamp
+            self.source = source
+            self.action = action
+            self.rating = rating
+            self.context = context
+            self.sessionId = sessionId
+            self.comment = comment
+        }
     }
     
     /// Context when a transition happened
-    struct EventContext: Codable {
-        var eqLow: Float?
-        var eqMid: Float?
-        var eqHigh: Float?
-        var bars: Int?
-        var tempoDiff: Double?
+    public struct EventContext: Codable, Sendable {
+        public var eqLow: Float?
+        public var eqMid: Float?
+        public var eqHigh: Float?
+        public var bars: Int?
+        public var tempoDiff: Double?
+        
+        public init(eqLow: Float? = nil, eqMid: Float? = nil, eqHigh: Float? = nil,
+                    bars: Int? = nil, tempoDiff: Double? = nil) {
+            self.eqLow = eqLow
+            self.eqMid = eqMid
+            self.eqHigh = eqHigh
+            self.bars = bars
+            self.tempoDiff = tempoDiff
+        }
     }
     
     /// Practice/performance session
-    struct Session: Codable, Identifiable {
-        let id: String
-        var startedAt: Date
-        var endedAt: Date?
-        var type: SessionType
-        var notes: String?
+    public struct Session: Codable, Identifiable, Sendable {
+        public let id: String
+        public var startedAt: Date
+        public var endedAt: Date?
+        public var type: SessionType
+        public var notes: String?
     }
     
     /// Phrase-level user tags
-    struct PhraseTags: Codable, Identifiable {
-        var id: String { phraseId }
-        let phraseId: String
-        var energyOverride: Double?
-        var rhythmStyle: RhythmStyle?
-        var mood: [String]
-        var customTags: [String]
-        var notes: String?
+    public struct PhraseTags: Codable, Identifiable, Sendable {
+        public var id: String { phraseId }
+        public let phraseId: String
+        public var energyOverride: Double?
+        public var rhythmStyle: RhythmStyle?
+        public var mood: [String]
+        public var customTags: [String]
+        public var notes: String?
+        
+        public init(phraseId: String, energyOverride: Double? = nil, rhythmStyle: RhythmStyle? = nil,
+                    mood: [String] = [], customTags: [String] = [], notes: String? = nil) {
+            self.phraseId = phraseId
+            self.energyOverride = energyOverride
+            self.rhythmStyle = rhythmStyle
+            self.mood = mood
+            self.customTags = customTags
+            self.notes = notes
+        }
     }
     
     /// Computed feedback statistics for a transition
-    struct TransitionFeedback {
-        let fromPhraseId: String
-        let toPhraseId: String
-        var practiceCount: Int = 0
-        var performanceCount: Int = 0
-        var totalCount: Int { practiceCount + performanceCount }
-        var averageRating: Double = 0
-        var lastUsed: Date?
-        var confidence: Double { min(1.0, Double(totalCount) / 10.0) }
+    public struct TransitionFeedback: Sendable {
+        public let fromPhraseId: String
+        public let toPhraseId: String
+        public var practiceCount: Int = 0
+        public var performanceCount: Int = 0
+        /// Played/rated events from other sources (manual, import).
+        public var otherCount: Int = 0
+        public var totalCount: Int { practiceCount + performanceCount + otherCount }
+        public var averageRating: Double = 0
+        public var lastUsed: Date?
+        public var confidence: Double { min(1.0, Double(totalCount) / 10.0) }
     }
     
     // MARK: - Properties
     
-    private var db: OpaquePointer?
+    // `nonisolated(unsafe)` only so deinit can close the handle; every other
+    // access happens on the main actor.
+    nonisolated(unsafe) private var db: OpaquePointer?
     private let dbPath: URL
     
-    @Published private(set) var currentSession: Session?
+    @Published public private(set) var currentSession: Session?
     
     // MARK: - Initialization
     
-    init() {
+    /// Database at an explicit file location (parent directory is created if needed).
+    public init(url: URL) {
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        dbPath = url
+    }
+    
+    /// Database at `~/Documents/MusicMill/relationships.db`.
+    public convenience init() {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let musicMillPath = documentsPath.appendingPathComponent("MusicMill")
-        
-        // Create directory if needed
-        try? FileManager.default.createDirectory(at: musicMillPath, withIntermediateDirectories: true)
-        
-        dbPath = musicMillPath.appendingPathComponent("relationships.db")
+        self.init(url: documentsPath
+            .appendingPathComponent("MusicMill")
+            .appendingPathComponent("relationships.db"))
     }
     
     deinit {
-        close()
+        if let db { sqlite3_close(db) }
     }
     
     // MARK: - Database Lifecycle
     
     /// Open database connection and create tables
-    func open() throws {
+    public func open() throws {
         if db != nil { return }  // Already open
         
         let result = sqlite3_open(dbPath.path, &db)
@@ -197,7 +259,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Close database connection
-    func close() {
+    public func close() {
         if let db = db {
             sqlite3_close(db)
             self.db = nil
@@ -274,7 +336,7 @@ class RelationshipDatabase: ObservableObject {
     // MARK: - Transition CRUD
     
     /// Save or update a transition
-    func saveTransition(_ transition: Transition) throws {
+    public func saveTransition(_ transition: Transition) throws {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         let sql = """
@@ -340,7 +402,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Get a transition by phrase IDs
-    func getTransition(from: String, to: String) throws -> Transition? {
+    public func getTransition(from: String, to: String) throws -> Transition? {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         let sql = "SELECT * FROM transitions WHERE from_phrase = ? AND to_phrase = ?"
@@ -424,7 +486,7 @@ class RelationshipDatabase: ObservableObject {
     // MARK: - Event Logging
     
     /// Log a transition event
-    func logEvent(_ event: TransitionEvent) throws {
+    public func logEvent(_ event: TransitionEvent) throws {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         // Ensure transition record exists
@@ -493,7 +555,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Convenience: Log a played transition
-    func logPlayed(from: String, to: String, source: EventSource, context: EventContext? = nil) throws {
+    public func logPlayed(from: String, to: String, source: EventSource, context: EventContext? = nil) throws {
         let event = TransitionEvent(
             id: UUID().uuidString,
             fromPhraseId: from,
@@ -510,7 +572,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Convenience: Log a rating
-    func logRating(from: String, to: String, rating: Int, source: EventSource = .manual) throws {
+    public func logRating(from: String, to: String, rating: Int, source: EventSource = .manual) throws {
         let event = TransitionEvent(
             id: UUID().uuidString,
             fromPhraseId: from,
@@ -529,7 +591,7 @@ class RelationshipDatabase: ObservableObject {
     // MARK: - Sessions
     
     /// Start a new session
-    func startSession(type: SessionType) throws -> Session {
+    public func startSession(type: SessionType) throws -> Session {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         let session = Session(
@@ -556,15 +618,13 @@ class RelationshipDatabase: ObservableObject {
             throw DatabaseError.executeFailed(String(cString: sqlite3_errmsg(db)))
         }
         
-        DispatchQueue.main.async {
-            self.currentSession = session
-        }
+        currentSession = session
         
         return session
     }
     
     /// End the current session
-    func endSession(notes: String? = nil) throws {
+    public func endSession(notes: String? = nil) throws {
         guard let db = db, let session = currentSession else { return }
         
         let sql = "UPDATE sessions SET ended_at = ?, notes = ? WHERE id = ?"
@@ -589,23 +649,21 @@ class RelationshipDatabase: ObservableObject {
             throw DatabaseError.executeFailed(String(cString: sqlite3_errmsg(db)))
         }
         
-        DispatchQueue.main.async {
-            self.currentSession = nil
-        }
+        currentSession = nil
     }
     
     // MARK: - Computed Statistics
     
     /// Get feedback statistics for a transition
-    func getFeedback(from: String, to: String) throws -> TransitionFeedback {
+    public func getFeedback(from: String, to: String) throws -> TransitionFeedback {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         var feedback = TransitionFeedback(fromPhraseId: from, toPhraseId: to)
         
-        // Count by source
+        // Count played and rated events, from any source
         let countSql = """
         SELECT source, COUNT(*) FROM transition_events 
-        WHERE from_phrase = ? AND to_phrase = ? AND action = 'played'
+        WHERE from_phrase = ? AND to_phrase = ? AND action IN ('played','rated')
         GROUP BY source
         """
         
@@ -626,6 +684,8 @@ class RelationshipDatabase: ObservableObject {
                 feedback.practiceCount = count
             } else if source == EventSource.performance.rawValue {
                 feedback.performanceCount = count
+            } else {
+                feedback.otherCount += count
             }
         }
         
@@ -686,7 +746,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Calculate adjusted weight incorporating user feedback
-    func adjustedWeight(baseWeight: Double, from: String, to: String) throws -> Double {
+    public func adjustedWeight(baseWeight: Double, from: String, to: String) throws -> Double {
         let feedback = try getFeedback(from: from, to: to)
         
         guard feedback.totalCount > 0 else { return baseWeight }
@@ -704,7 +764,7 @@ class RelationshipDatabase: ObservableObject {
     // MARK: - Phrase Tags
     
     /// Save phrase tags
-    func savePhraseTags(_ tags: PhraseTags) throws {
+    public func savePhraseTags(_ tags: PhraseTags) throws {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         let sql = """
@@ -757,7 +817,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Get phrase tags
-    func getPhraseTags(phraseId: String) throws -> PhraseTags? {
+    public func getPhraseTags(phraseId: String) throws -> PhraseTags? {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         let sql = "SELECT * FROM phrase_tags WHERE phrase_id = ?"
@@ -821,7 +881,7 @@ class RelationshipDatabase: ObservableObject {
     // MARK: - Queries
     
     /// Get all transitions with feedback stats, sorted by usage
-    func getAllTransitionsWithFeedback() throws -> [(Transition, TransitionFeedback)] {
+    public func getAllTransitionsWithFeedback() throws -> [(Transition, TransitionFeedback)] {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         let sql = "SELECT * FROM transitions ORDER BY updated_at DESC"
@@ -844,7 +904,7 @@ class RelationshipDatabase: ObservableObject {
     }
     
     /// Get top-rated transitions for a source phrase
-    func getTopTransitions(from phraseId: String, limit: Int = 10) throws -> [(Transition, TransitionFeedback)] {
+    public func getTopTransitions(from phraseId: String, limit: Int = 10) throws -> [(Transition, TransitionFeedback)] {
         guard let db = db else { throw DatabaseError.openFailed("Database not open") }
         
         let sql = "SELECT * FROM transitions WHERE from_phrase = ?"
